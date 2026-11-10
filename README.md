@@ -48,6 +48,9 @@ uvx --from git+https://github.com/Chamanrajragu/purffle-shorts purffle-shorts de
 
 ---
 
+**Threads post + comments format:** import an existing `script.json`, edit each card,
+and preview the same Threads cards used in the final render. [Format and example](docs/threads.md).
+
 ## 🤖 What is PurffleShorts?
 
 PurffleShorts is a **YouTube Shorts automation tool** for faceless channels. Start it and it keeps going: fresh topic, retention-focused script that a second AI pass reviews and tightens, natural AI voiceover, relevant footage, captions synced to each spoken word, sound effects, a polished render, and an upload or scheduled release. It stays inside YouTube's daily API quota.

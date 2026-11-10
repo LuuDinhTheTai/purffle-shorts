@@ -306,6 +306,12 @@ def compose(settings: Settings, segments: list[Path], lengths: list[float], voic
         nonlocal inputs
         inputs += ["-framerate", str(F), "-loop", "1", "-t", f"{max(seconds, 1.0 / F):.3f}", "-i", str(png.resolve())]
 
+    if plan.threads:
+        playlist, cx, cy = plan.threads
+        inputs += ["-f", "concat", "-safe", "0", "-i", str(playlist.resolve())]
+        f.append(f"[{idx}:v]format=yuva420p[threads]")
+        overlay("threads", f"x={cx}:y={cy}", "vthreads")
+        idx += 1
     if plan.chat:
         playlist, cx, cy = plan.chat
         inputs += ["-f", "concat", "-safe", "0", "-i", str(playlist.resolve())]

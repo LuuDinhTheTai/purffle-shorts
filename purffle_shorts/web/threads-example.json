@@ -1,0 +1,31 @@
+{
+  "style": "threads",
+  "language": "vi",
+  "topic": "Một ngày sống chậm",
+  "title": "Bài viết và bình luận trên Threads",
+  "hook_text": "",
+  "description": "Ví dụ minh họa, nội dung và tài khoản hư cấu.",
+  "cast": ["songcham"],
+  "scenes": [
+    {
+      "narration": "Hôm nay mình thử không cầm điện thoại trong một giờ đầu sau khi thức dậy. Bất ngờ là mình có thời gian ăn sáng và ngắm đường phố.",
+      "search_query": "morning coffee city",
+      "thread": {"kind": "post", "author": "songcham", "timestamp": "20 giờ", "likes": "1.4K", "replies": "319", "reposts": "14", "shares": "65"}
+    },
+    {
+      "narration": "Điều khó nhất không phải là bỏ điện thoại xuống, mà là nhận ra mình đã quen lấp đầy mọi khoảng trống bằng việc lướt màn hình.",
+      "search_query": "city morning walking",
+      "thread": {"kind": "post", "author": "songcham", "timestamp": "20 giờ"}
+    },
+    {
+      "narration": "Mình cũng thử rồi! Mới đầu cứ vô thức đưa tay tìm điện thoại, sau vài ngày thì quen dần.",
+      "search_query": "relaxing morning home",
+      "thread": {"kind": "comment", "author": "motnguoidoc", "timestamp": "18 giờ", "likes": "128", "replies": "6"}
+    },
+    {
+      "narration": "Một giờ thì hơi khó với mình. Bắt đầu bằng mười phút chắc dễ duy trì hơn.",
+      "search_query": "breakfast coffee table",
+      "thread": {"kind": "comment", "author": "cafe.sang", "timestamp": "17 giờ", "likes": "42", "replies": "2"}
+    }
+  ]
+}

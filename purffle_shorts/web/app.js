@@ -31,6 +31,7 @@ const I = {
 };
 // One line drawing per format, so the choice reads at a glance.
 const G = {
+  threads: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="7" cy="8" r="1.5"/><path d="M11 8h6M6 12h12M6 15h8M6 18h2m3 0h2"/></svg>',
   auto: '<svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/></svg>',
   facts: '<svg viewBox="0 0 24 24"><path d="M9 6.5h11M9 12h8M9 17.5h10"/><circle cx="4.8" cy="6.5" r="1.2" fill="currentColor"/><circle cx="4.8" cy="12" r="1.2" fill="currentColor"/><circle cx="4.8" cy="17.5" r="1.2" fill="currentColor"/></svg>',
   story: '<svg viewBox="0 0 24 24"><path d="M3.5 17c3-6 5.5-6 8.5 0s5.5 0 8.5-9"/><circle cx="3.5" cy="17" r="1.5" fill="currentColor"/><path d="M20.5 8V4l-3 1.5"/></svg>',
@@ -46,6 +47,7 @@ const G = {
 };
 
 const FORMATS = [
+  ["threads", "Threads", "Read a post and its comments", true],
   ["auto", "Auto", "The AI picks the best format"],
   ["facts", "Facts", "Rapid-fire surprising facts"],
   ["story", "Story", "A true story with a twist"],
@@ -314,6 +316,10 @@ function payload(extra = {}) {
 
 async function startMake(extra = {}) {
   const f = S.form;
+  if (f.mode === "script" && !extra.script) {
+    if (!S.draft) return toast("Choose a script.json first.", "bad");
+    extra = { ...extra, script: S.draft, topic: "", url: "", source: "" };
+  }
   if (f.mode === "url" && !f.url.trim() && !extra.script) return toast("Paste the address of a web page first.", "bad");
   try {
     const { job } = await post("/api/make", payload(extra));
@@ -357,8 +363,9 @@ function drawForm() {
   $("#form").innerHTML = `
   <section class="card">
     ${sh("01", "What is it about?")}
-    <div class="src-tabs">${seg("mode", [["topic", "Topic"], ["url", "Web page"], ["queue", "Idea queue"], ["auto", "Surprise me"]], f.mode)}</div>
-    ${f.mode === "topic" ? `<div class="field big"><input type="text" data-f="topic" value="${esc(f.topic)}" placeholder="Why octopuses have three hearts" aria-label="Topic"><p class="hint">Broad or specific: the AI finds the surprising angle, using what people actually search for.</p></div>`
+    <div class="src-tabs">${seg("mode", [["script", "script.json"], ["topic", "Topic"], ["url", "Web page"], ["queue", "Idea queue"], ["auto", "Surprise me"]], f.mode)}</div>
+    ${f.mode === "script" ? `<div class="field"><label for="script-file">Load the script returned by your AI</label><input id="script-file" type="file" accept=".json,application/json"><p class="hint">Threads: each scene is a post section or a comment. Add author and engagement counts in its thread field. Edit the script and preview each card before rendering.</p><a href="/static/threads-example.json" download="script.json">Download a Threads script example</a></div>`
+    : f.mode === "topic" ? `<div class="field big"><input type="text" data-f="topic" value="${esc(f.topic)}" placeholder="Why octopuses have three hearts" aria-label="Topic"><p class="hint">Broad or specific: the AI finds the surprising angle, using what people actually search for.</p></div>`
     : f.mode === "url" ? `<div class="field big"><input type="url" data-f="url" value="${esc(f.url)}" placeholder="https://… an article, a blog post or a Reddit post" aria-label="Web page"><p class="hint">The page's text becomes the script's source material.</p></div>`
     : f.mode === "queue" ? `<p class="hint">Uses the oldest idea in your queue (${i_ideas()} waiting). Plan more on the <a href="#ideas">Ideas</a> page.</p>`
     : `<p class="hint">Picks a fresh topic from your niches and topic sources in .env.</p>`}
@@ -423,7 +430,7 @@ function drawForm() {
   </section>
 
   <div class="go-row">
-    <button class="btn" id="draft-btn" type="button">${I.pen}Draft the script first</button>
+    <button class="btn" id="draft-btn" type="button"${f.mode === "script" ? " disabled" : ""}>${I.pen}Draft the script first</button>
     <button class="btn rec" id="make-btn" type="button"><span class="dot"></span>Create video<kbd>${/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl"} ↵</kbd></button>
   </div>`;
   bindForm();
@@ -443,10 +450,13 @@ function bindForm() {
     const b = e.target.closest("[data-seg]");
     if (!b) return;
     const k = b.dataset.seg, v = b.dataset.v;
-    const multiBefore = MULTI.has(S.form.style);
     S.form[k] = v;
+    if (k === "style" && v === "threads") {
+      S.form.mode = "script";
+      if (S.draft) { S.draft.style = "threads"; saveDraft(); }
+    }
     saveForm();
-    if (k === "mode" || (k === "style" && MULTI.has(v) !== multiBefore)) return drawForm();
+    if (k === "mode" || k === "style") { drawForm(); drawSide(); return; }
     $$(`[data-seg="${k}"]`, root).forEach(x => x.setAttribute("aria-pressed", String(x.dataset.v === v)));
     if (k === "caption_style" || k === "aspect" || k === "caption_position") drawSide();
   });
@@ -464,6 +474,25 @@ function bindForm() {
   });
   $("#make-btn").onclick = () => startMake();
   $("#draft-btn").onclick = startDraft;
+  const scriptFile = $("#script-file");
+  if (scriptFile) scriptFile.onchange = async () => {
+    try {
+      const file = scriptFile.files[0];
+      if (!file) return;
+      if (file.size > 500 * 1024) throw new Error("Script is too large (maximum 500 KB).");
+      const script = JSON.parse(await file.text());
+      if (!Array.isArray(script.scenes) || !script.scenes.length || script.scenes.some(s => !s || typeof s.narration !== "string" || !s.narration.trim()))
+        throw new Error("script.json needs scenes with non-empty narration.");
+      script.style = S.form.style === "threads" ? "threads" : script.style || "threads";
+      script.language = script.language || S.form.language;
+      S.form.style = script.style;
+      S.form.language = script.language;
+      S.draft = script;
+      S.threadPage = 0;
+      saveForm(); saveDraft(); drawForm(); drawSide();
+      toast("Script loaded. Review the cards, then render.", "ok");
+    } catch (e) { toast(esc(e.message), "bad"); }
+  };
 }
 
 async function loadVoices() {
@@ -550,13 +579,15 @@ function drawEditor() {
   if (!box) return;
   const d = S.draft, f = S.form;
   const j = currentCreateJob();
+  const threads = (d ? d.style : f.style) === "threads";
   if (!d) {
     if (j && (j.status === "running" || j.status === "queued")) { box.innerHTML = ""; return; }
     const shape = { "9:16": "s916", "16:9": "s169", "1:1": "s11", "4:5": "s45" }[f.aspect] || "s916";
     const res = { "9:16": "1080×1920", "16:9": "1920×1080", "1:1": "1080×1080", "4:5": "1080×1350" }[f.aspect] || "";
     box.innerHTML = `<div class="monitor" aria-label="Preview">
       <div class="mhead"><span>Program monitor</span><span class="rec">Preview</span></div>
-      <div class="frame ${shape}"><div class="bar"></div><div class="wm">${esc(S.info.channel || "")}</div><div class="ph-hook">This animal has 3 hearts</div>${capSample(f.caption_style, f.caption_position)}<span class="tc">00:00:02:14</span></div>
+      <div class="frame ${shape}${threads ? " threads-frame" : ""}">${threads ? '<img id="threads-preview" alt="Threads card preview"><span id="threads-preview-status" class="preview-status" role="status">Loading card…</span>' : `<div class="bar"></div><div class="wm">${esc(S.info.channel || "")}</div><div class="ph-hook">This animal has 3 hearts</div>${capSample(f.caption_style, f.caption_position)}<span class="tc">00:00:02:14</span>`}</div>
+      ${threads ? threadPreviewControls() : ""}
       <div class="spec"><span><b>${esc(res)}</b></span><span>${esc(f.aspect)}</span><span>${esc(f.caption_style)}</span><span>${esc(f.language)}</span></div>
     </div>
     <section class="card"><ol class="steps">
@@ -564,16 +595,17 @@ function drawEditor() {
       <li><div><b>Create the video</b><small>Voice, footage, word-synced captions, sound and the render in one go, usually about a minute.</small></div></li>
       <li><div><b>Publish</b><small>To YouTube, TikTok and Instagram from the Library, or switch on publishing here.</small></div></li>
     </ol></section>`;
+    if (threads) refreshThreadPreview();
     return;
   }
-  const multi = MULTI.has(d.style) || d.scenes.some(s => s.speaker === "B");
+  const multi = !threads && (MULTI.has(d.style) || d.scenes.some(s => s.speaker === "B"));
   const total = d.scenes.reduce((n, s) => n + words(s.narration), 0);
   const target = Math.round((f.duration || 40) * 2.6);
-  box.innerHTML = `<section class="card">
+  box.innerHTML = `${threads ? threadMonitor() : ""}<section class="card">
     ${sh("SC", "Script", `<span class="chip">${esc(d.style)}</span><span class="chip">${esc(d.language)}</span><span class="wc" id="wc">${total} words · ~${Math.round(total / 2.6)}s</span><button class="btn ghost sm" id="discard" type="button">${I.trash}Discard</button>`)}
     ${d.score != null ? `<div class="score"><div class="ring" data-p="${d.score}"><b>${d.score}</b></div><div class="grow"><b>Retention score</b>${rubricHtml(d.rubric)}${d.review && d.review.length ? `<ul>${d.review.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : `<p class="hint">No issues found.</p>`}</div></div>` : ""}
     <div class="field"><label>Title</label><input type="text" data-k="title" value="${esc(d.title)}" maxlength="90"></div>
-    <div class="field"><label>On-screen hook</label><input type="text" data-k="hook_text" value="${esc(d.hook_text)}" maxlength="48"></div>
+    ${threads ? '<p class="hint">Each card stays on screen while its narration is read. Long sections continue on the next card. Captions, hook and emoji are replaced by the Threads cards.</p>' : `<div class="field"><label>On-screen hook</label><input type="text" data-k="hook_text" value="${esc(d.hook_text)}" maxlength="48"></div>`}
     ${multi ? `<div class="grid2"><div class="field"><label>Speaker A</label><input type="text" data-cast="0" value="${esc((d.cast || [])[0] || "")}"></div>
       <div class="field"><label>Speaker B</label><input type="text" data-cast="1" value="${esc((d.cast || [])[1] || "")}"></div></div>` : ""}
     <div class="field"><label>Scenes <span class="hint">· target about ${target} words</span></label>
@@ -582,6 +614,7 @@ function drawEditor() {
         <span class="num">${multi ? esc(s.speaker || "A") : String(n + 1).padStart(2, "0")}</span>
         <div class="field">
           <textarea data-i="${n}" data-s="narration" aria-label="Scene ${n + 1} narration">${esc(s.narration)}</textarea>
+          ${threads ? `<div class="grid2"><div class="field"><label>Username</label><input data-i="${n}" data-thread="author" value="${esc((s.thread || {}).author || "")}" placeholder="threads_user"></div><div class="field"><label>Card type</label><select data-i="${n}" data-thread="kind"><option value="post"${((s.thread || {}).kind || (n ? "comment" : "post")) === "post" ? " selected" : ""}>Post section</option><option value="comment"${((s.thread || {}).kind || (n ? "comment" : "post")) === "comment" ? " selected" : ""}>Comment</option></select></div></div><div class="field"><label>Card text (optional, defaults to narration)</label><textarea data-i="${n}" data-thread="text" aria-label="Card ${n+1} text">${esc((s.thread || {}).text || "")}</textarea></div><div class="grid2">${["timestamp", "likes", "replies", "reposts", "shares"].map(key => `<div class="field"><label>${key}</label><input data-i="${n}" data-thread="${key}" value="${esc((s.thread || {})[key] ?? "")}"></div>`).join("")}</div>` : ""}
           <div class="row">
             ${multi ? `<button class="btn ghost sm" type="button" data-act="speaker" data-i="${n}" title="Switch speaker">A/B</button>` : ""}
             <input type="text" data-i="${n}" data-s="search_query" value="${esc(s.search_query)}" placeholder="footage search" aria-label="Footage search">
@@ -602,12 +635,14 @@ function drawEditor() {
   box.oninput = e => {
     const el = e.target;
     if (el.dataset.k) d[el.dataset.k] = el.value;
+    else if (el.dataset.thread) { const scene = d.scenes[+el.dataset.i]; scene.thread = scene.thread || {}; scene.thread[el.dataset.thread] = el.value; }
     else if (el.dataset.s) d.scenes[+el.dataset.i][el.dataset.s] = el.value;
     else if (el.dataset.cast) { d.cast = d.cast || ["", ""]; d.cast[+el.dataset.cast] = el.value; }
     else if (el.hasAttribute("data-tags")) d.hashtags = el.value.split(/\s+/).filter(Boolean);
     const t = d.scenes.reduce((n, s) => n + words(s.narration), 0);
     $("#wc").textContent = `${t} words · ~${Math.round(t / 2.6)}s`;
     saveDraft();
+    if (threads) scheduleThreadPreview();
   };
   box.onclick = e => {
     const b = e.target.closest("[data-act]");
@@ -622,11 +657,49 @@ function drawEditor() {
     drawEditor();
   };
   $("#discard").onclick = () => { if (confirm("Discard this script?")) { S.draft = null; saveDraft(); drawEditor(); } };
+  if (threads) refreshThreadPreview();
   $("#render-btn").onclick = () => {
     const clean = Object.assign({}, d, { scenes: d.scenes.filter(s => s.narration.trim()) });
     if (!clean.scenes.length) return toast("The script has no narration.", "bad");
     startMake({ script: clean, topic: "", url: "", source: "" });
   };
+}
+
+function threadPreviewControls() {
+  return `<div class="thread-preview-controls"><button type="button" class="btn ghost sm" id="thread-prev" aria-label="Previous card">${I.up}</button><span id="thread-page" aria-live="polite">Card preview</span><button type="button" class="btn ghost sm" id="thread-next" aria-label="Next card">${I.down}</button></div>`;
+}
+function threadMonitor() {
+  const shape = { "9:16": "s916", "16:9": "s169", "1:1": "s11", "4:5": "s45" }[S.form.aspect] || "s916";
+  return `<div class="monitor"><div class="mhead"><span>Program monitor</span><span class="rec">Threads</span></div><div class="frame ${shape} threads-frame"><img id="threads-preview" alt="Threads card preview"><span id="threads-preview-status" class="preview-status" role="status">Loading card…</span></div>${threadPreviewControls()}</div>`;
+}
+let threadPreviewTimer, threadPreviewRequest = 0;
+function scheduleThreadPreview() {
+  threadPreviewRequest++;
+  clearTimeout(threadPreviewTimer);
+  threadPreviewTimer = setTimeout(refreshThreadPreview, 300);
+}
+async function refreshThreadPreview() {
+  const img = $("#threads-preview"), status = $("#threads-preview-status");
+  if (!img) return;
+  const request = ++threadPreviewRequest;
+  try {
+    status.textContent = "Loading card…";
+    const script = S.draft || await get("/static/threads-example.json");
+    const result = await post("/api/threads-preview", payload({ script, page: S.threadPage || 0 }));
+    if (request !== threadPreviewRequest || !img.isConnected) return;
+    img.src = result.image;
+    status.textContent = "";
+    S.threadPage = result.page;
+    $("#thread-page").textContent = `Card ${result.page+1} / ${result.pages} · Scene ${result.scene+1}`;
+    $("#thread-prev").disabled = result.page === 0;
+    $("#thread-next").disabled = result.page === result.pages-1;
+    $("#thread-prev").onclick = () => { S.threadPage--; refreshThreadPreview(); };
+    $("#thread-next").onclick = () => { S.threadPage++; refreshThreadPreview(); };
+  } catch (e) {
+    if (request !== threadPreviewRequest || !img.isConnected) return;
+    img.removeAttribute("src");
+    status.textContent = e.message;
+  }
 }
 
 // ------------------------------------------------------------------ LIBRARY

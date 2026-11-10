@@ -930,6 +930,7 @@ class OverlayPlan:
     ass: Path | None = None                    # subtitles file (ass)
     fonts_dir: Path | None = None
     chat: tuple[Path, int, int] | None = None  # (ffconcat playlist, x, y) for chat stories
+    threads: tuple[Path, int, int] | None = None  # timed Threads post/comment cards
     card: tuple[Path, int, int] | None = None  # (png, x, y) post card for Reddit-style stories
     card_until: float = 0.0
     emoji: tuple[Path, int, int] | None = None  # (ffconcat playlist, x, y) emoji popping up above the captions
@@ -939,12 +940,16 @@ def build_overlays(settings: Settings, chunks: list[Chunk], total: float, hook_t
                    labels: dict[str, str] | None = None, chat: list[ChatMessage] | None = None,
                    contact: str = "", card: tuple[str, str, str] | None = None,
                    card_until: float = 0.0, emphasis: set[str] | None = None,
-                   emoji: list[tuple[float, float, str]] | None = None) -> OverlayPlan:
+                   emoji: list[tuple[float, float, str]] | None = None,
+                   threads: tuple[Path, int, int] | None = None) -> OverlayPlan:
     """labels: speaker name tags over the captions (dialogue). chat: render a text-message screen
     instead of captions (the messages are the captions). card: (community, poster, title) of a post card
     shown until ``card_until`` in place of the hook title (pass captions that start after it).
     emphasis: key words (see utils.emphasis_key) drawn in the style's emphasis colour, as are numbers.
     emoji: (start, end, emoji) shown above the captions."""
+    if threads:
+        # The card itself contains the full spoken text. Other text layers obscure it.
+        return OverlayPlan("pillow", threads=threads)
     emphasis = (set(emphasis or ()) if settings.caption_emphasis else None)
     emoji_plan = emoji_pops(settings, emoji, total, work / "emoji") if emoji and settings.caption_emoji else None
     style = CAPTION_STYLES.get(settings.caption_style, CAPTION_STYLES["bold"])

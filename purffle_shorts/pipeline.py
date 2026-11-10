@@ -269,7 +269,7 @@ class Studio:
         if s.offline:
             engines += ["system", "silent"]
         lines = [(sc.speaker, sc.narration) for sc in script.scenes] if (
-            script.multi_speaker or script.style in MULTI_SPEAKER) else None
+            script.multi_speaker or script.style in MULTI_SPEAKER or script.style == "threads") else None
         last: Exception | None = None
         for eng in dict.fromkeys(engines):
             try:
@@ -387,16 +387,17 @@ class Studio:
         state["folder"] = folder
         work = folder / "work"
         work.mkdir(parents=True, exist_ok=True)
-        (folder / "script.json").write_text(json.dumps(script.to_dict(), indent=2, ensure_ascii=False))
+        (folder / "script.json").write_text(json.dumps(script.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
         try:
             self._step("voice", f"{s.tts_engine} voice")
             speech = self._speak(script, work, s)
             total = round(speech.duration + END_PAD, 3)
             chat = script.style == "chat"
+            threads = script.style == "threads"
             timeline = scene_timeline([sc.narration for sc in script.scenes], speech.words, total, s.language,
                                       starts=speech.line_starts, min_len=4.5 if chat else 1.2)
             # A chat story's picture is mostly the phone screen: more cuts behind it would only cost time.
-            shots = split_shots(timeline, speech.words, 0 if chat else s.max_shot_seconds)
+            shots = split_shots(timeline, speech.words, 0 if chat or threads else s.max_shot_seconds)
             joins = [a.index == b.index for a, b in zip(shots, shots[1:])]
             T = s.transition_seconds if s.transition != "none" else 0.0
             background = background_item(s, total)
@@ -445,11 +446,20 @@ class Studio:
                     on_screen = caption_chunks(speech.words[n0:], s.caption_max_words, total=total)
             emoji = []  # each scene's emoji pops up as the scene starts (not over a chat or a post card)
             for k, (sc, tm) in enumerate(zip(script.scenes, timeline)):
-                if sc.emoji and not chat and not (card and k == 0):
+                if sc.emoji and not chat and not threads and not (card and k == 0):
                     emoji.append((tm.start + 0.05, min(tm.end, tm.start + 1.65), sc.emoji))
+            threads_plan = None
+            if threads:
+                from .threads import ThreadsScreen, resolve_threads_font
+                font = resolve_threads_font(s)
+                screen = ThreadsScreen(s, font)
+                starts = speech.line_starts or [tm.start for tm in timeline]
+                threads_plan = (screen.build(script.scenes, starts, total, work / "threads", script.cast),
+                                screen.x, screen.y)
             plan = build_overlays(s, on_screen, total, script.hook_text, work, labels=labels, chat=messages,
                                   contact=script.speaker_name("A"), card=card, card_until=card_until,
-                                  emphasis={k for sc in script.scenes for k in sc.emphasis}, emoji=emoji)
+                                  emphasis={k for sc in script.scenes for k in sc.emphasis}, emoji=emoji,
+                                  threads=threads_plan)
 
             self._step("render", f"{s.width}x{s.height}")
             video = folder / ("short.mp4" if s.vertical else "video.mp4")
@@ -497,7 +507,7 @@ class Studio:
                             for m in media + ([background] if split else [])],
                 "parent_id": parent_id, "created_at": now_iso(),
             }
-            (folder / "metadata.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False))
+            (folder / "metadata.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
 
             rid = self.history.add_video(
                 subject=pick.subject, source=pick.source, topic=script.topic, style=script.style,
@@ -583,7 +593,7 @@ class Studio:
         to = list(dict.fromkeys(self.s.publish_to or ["youtube"]))
         folder = Path(rec["folder"])
         meta_file = folder / "metadata.json"
-        meta = json.loads(meta_file.read_text()) if meta_file.exists() else {}
+        meta = json.loads(meta_file.read_text(encoding="utf-8")) if meta_file.exists() else {}
         posted = dict(meta.get("published") or {})
         on_youtube = "youtube" in to and not rec.get("youtube_id")
         others = [p for p in to if p != "youtube" and (posted.get(p) or {}).get("status") not in crosspost.DONE]
@@ -610,7 +620,7 @@ class Studio:
             results = crosspost.publish(self.s, Path(rec["video_path"]), meta, others, when)
             posted.update({p: r.to_dict() for p, r in results.items()})
             meta["published"] = posted
-            meta_file.write_text(json.dumps(meta, indent=2, ensure_ascii=False))
+            meta_file.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
             out = [r for r in results.values() if r.status in crosspost.DONE]
             failed = [r for r in results.values() if r.status not in crosspost.DONE]
             for r in out:

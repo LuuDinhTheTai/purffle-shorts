@@ -28,6 +28,7 @@ LANGUAGES = {
 }
 
 STYLES = {
+    "threads": "Read an existing Threads post and its comments as sequential social cards from script.json.",
     "facts": "Rapid-fire surprising facts about one specific subject, each one more surprising than the last.",
     "story": "A tight true story: a hook that opens a loop, rising tension, then a satisfying twist or payoff.",
     "listicle": "A top-3 countdown (number 3, number 2, number 1) where number 1 is the most surprising.",
@@ -132,6 +133,7 @@ class Scene:
     speaker: str = "A"
     emphasis: list[str] = field(default_factory=list)  # words of the narration highlighted on screen
     emoji: str = ""                                    # one emoji popped in above the captions
+    thread: dict = field(default_factory=dict)  # Threads card: author, text, kind, timestamp and counts
 
 
 @dataclass
@@ -334,11 +336,12 @@ def normalize(data: dict, subject: str, style: str, language: str) -> Script:
         scenes.append(Scene(narration=narration, search_query=truncate_words(query, 60),
                             image_prompt=str(s.get("image_prompt") or query).strip(),
                             speaker=_speaker(s.get("speaker")) if multi else "A",
-                            emphasis=_emphasis(s.get("emphasis"), narration), emoji=one_emoji(s.get("emoji"))))
+                            emphasis=_emphasis(s.get("emphasis"), narration), emoji=one_emoji(s.get("emoji")),
+                            thread=dict(s["thread"]) if isinstance(s.get("thread"), dict) else {}))
     if not scenes:
         raise ValueError("script has no narration")
     limit = 20 if style == "chat" else 12
-    while len(scenes) > limit:  # merge the shortest same-speaker neighbours to keep cuts watchable
+    while style != "threads" and len(scenes) > limit:  # Threads cards must keep their authors and boundaries
         pairs = [k for k in range(len(scenes) - 1) if scenes[k].speaker == scenes[k + 1].speaker]
         if not pairs:
             break
@@ -381,6 +384,8 @@ def normalize(data: dict, subject: str, style: str, language: str) -> Script:
         cast = (cast + defaults[len(cast):])[:2] if len(cast) < 2 else cast[:2]
         if style == "reddit":
             cast = [_handle(cast[0], "r/"), _handle(cast[1], "u/")]
+    elif style == "threads":
+        cast = cast[:1]
     else:
         cast = []
 
@@ -711,7 +716,7 @@ def load_script(path: str | Path, settings: Settings) -> Script:
 def script_from_data(data: dict, settings: Settings, fallback_subject: str = "my video") -> Script:
     subject = str(data.get("topic") or data.get("title") or fallback_subject)
     style = data.get("style") if data.get("style") in STYLES else "facts"
-    if style not in MULTI_SPEAKER and any(_speaker(s.get("speaker")) == "B" for s in data.get("scenes") or []
+    if style != "threads" and style not in MULTI_SPEAKER and any(_speaker(s.get("speaker")) == "B" for s in data.get("scenes") or []
                                           if isinstance(s, dict)):
         style = "dialogue"
     language = str(data.get("language") or settings.language)

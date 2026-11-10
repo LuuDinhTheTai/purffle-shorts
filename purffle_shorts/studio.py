@@ -34,7 +34,8 @@ log = logging.getLogger("purffle")
 
 WEB = Path(__file__).parent / "web"
 FILES = ("short.mp4", "video.mp4", "cover.jpg", "captions.srt", "metadata.json", "script.json")
-STATIC = {"app.js": "text/javascript; charset=utf-8", "app.css": "text/css; charset=utf-8",
+STATIC = {"threads-example.json": "application/json; charset=utf-8",
+          "app.js": "text/javascript; charset=utf-8", "app.css": "text/css; charset=utf-8",
           "icon.svg": "image/svg+xml"}
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]", "::1"}
 
@@ -616,6 +617,36 @@ def _handler(app: StudioServer, bound_host: str, password: str | None = None):
                 return self._json({"error": "expected an object"}, 400)
             path = self.path
             h = app.studio.history
+            if path == "/api/threads-preview":
+                import io
+
+                from PIL import Image
+
+                from .script import script_from_data
+                from .threads import ThreadsScreen, resolve_threads_font
+                try:
+                    settings = app.overrides(body)
+                    raw = body.get("script")
+                    if not isinstance(raw, dict):
+                        raise ValueError("Choose a script.json first")
+                    if not isinstance(raw.get("scenes"), list) or any(
+                            not isinstance(scene, (dict, str)) for scene in raw["scenes"]):
+                        raise ValueError("Script scenes must contain narration objects")
+                    script = script_from_data(dict(raw, style="threads"), settings)
+                    settings = replace(settings, language=script.language)
+                    font = resolve_threads_font(settings)
+                    screen = ThreadsScreen(settings, font)
+                    pages = screen.pages(script.scenes, script.cast)
+                    index = max(0, min(len(pages)-1, int(body.get("page") or 0)))
+                    canvas = Image.new("RGBA", settings.resolution)
+                    canvas.alpha_composite(screen.render(pages[index]), (screen.x, screen.y))
+                    canvas.thumbnail((540, 640), Image.Resampling.LANCZOS)
+                    buf = io.BytesIO()
+                    canvas.save(buf, format="PNG")
+                    return self._json({"image": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode(),
+                                       "page": index, "pages": len(pages), "scene": pages[index].scene})
+                except (ValueError, TypeError, KeyError) as e:
+                    return self._json({"error": str(e)}, 400)
             if path in ("/api/make", "/api/draft"):
                 kind = "make" if path == "/api/make" else "draft"
                 label = (body.get("script") or {}).get("title") if isinstance(body.get("script"), dict) else None

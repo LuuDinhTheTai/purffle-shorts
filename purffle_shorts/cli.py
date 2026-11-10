@@ -120,7 +120,7 @@ def _common(p: argparse.ArgumentParser) -> None:
     g.add_argument("--source", choices=["niche", "search", "trending", "wikipedia", "reddit", "rss", "file", "queue"],
                    help="topic source")
     g.add_argument("--niche", action="append", help="niche to pick topics from (repeatable)")
-    g.add_argument("--style", help="facts|story|listicle|myth|quiz|motivational|news|explainer|dialogue|chat|reddit|auto")
+    g.add_argument("--style", help="facts|story|listicle|myth|quiz|motivational|news|explainer|dialogue|chat|reddit|threads|auto")
     g.add_argument("--lang", dest="language", help="language code, e.g. en, es, hi, ta, fr, ja")
     g.add_argument("--duration", dest="target_seconds", type=int, help="target length in seconds (15-170)")
     g.add_argument("--provider", dest="llm_provider", help="LLM provider (see `providers`)")

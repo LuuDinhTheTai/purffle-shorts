@@ -49,6 +49,20 @@ def test_page_has_token_and_strict_csp(server):
     assert req(port, "GET", "/static/../studio.py")[0] == 404
 
 
+def test_threads_preview_returns_real_card_and_clamps_page(server):
+    app, port = server
+    script = {"style": "threads", "title": "Threads", "scenes": [
+        {"narration": "A post", "thread": {"author": "poster", "kind": "post"}},
+        {"narration": "A reply", "thread": {"author": "reader", "kind": "comment"}},
+    ]}
+    status, _, body = req(port, "POST", "/api/threads-preview", {"script": script, "page": 100}, app.token)
+    result = json.loads(body)
+    assert status == 200 and result["image"].startswith("data:image/png;base64,")
+    assert result["page"] == 1 and result["scene"] == 1 and result["pages"] == 2
+    assert req(port, "POST", "/api/threads-preview", {"script": {}}, app.token)[0] == 400
+    assert req(port, "GET", "/static/threads-example.json")[0] == 200
+
+
 def test_other_host_names_are_refused(server):
     app, port = server
     assert req(port, "GET", "/api/info", host="evil.example:8765")[0] == 421
