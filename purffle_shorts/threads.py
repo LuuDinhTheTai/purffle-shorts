@@ -1,7 +1,7 @@
 """Threads post/comment cards, shared by the video renderer and Studio preview.
 
-No remote avatars or engagement figures are invented. Each scene supplies its own
-``thread`` metadata; long text continues on another card without shrinking the type.
+Author names and avatars use fixed mosaics in rendered cards. Long text
+continues on another card without shrinking the type.
 """
 from __future__ import annotations
 
@@ -92,13 +92,6 @@ class ThreadsScreen:
         self.size = max(12, round(settings.unit * .036))
         self.pad = round(self.size * 1.6)
         self.font = load_font(self.fp, self.size, 450)
-        bold_path = None
-        if font_path:
-            bold_path = next((path for path in (
-                font_path.with_stem(font_path.stem + "-Bold"),
-                font_path.with_name("arialbd.ttf") if font_path.name.lower() == "arial.ttf" else font_path,
-            ) if path != font_path and path.is_file()), None)
-        self.name_font = load_font(str(bold_path) if bold_path else self.fp, self.size, 700)
         self.small = load_font(self.fp, max(10, round(self.size * .84)), 450)
         self.line_h = math.ceil(self.size * 1.4)
         self.avatar = round(self.size * 2.4)
@@ -146,12 +139,16 @@ class ThreadsScreen:
                                         meta, index, part + 1, parts))
         return pages
 
+    @staticmethod
+    def _mosaic(pattern, size):
+        palette = ((57, 59, 64), (86, 89, 95), (116, 120, 128), (149, 153, 162))
+        tiles = Image.new("RGB", (len(pattern[0]), len(pattern)))
+        tiles.putdata([palette[int(tile)] for row in pattern for tile in row])
+        return tiles.resize(size, Image.Resampling.NEAREST)
+
     def _avatar(self, image, draw, x, y, follow):
         size = self.avatar
-        avatar = Image.new("RGBA", (size, size), "#F3F5F7")
-        portrait = ImageDraw.Draw(avatar)
-        portrait.ellipse((size*.30, size*.20, size*.70, size*.60), fill="#858A96")
-        portrait.ellipse((size*.08, size*.66, size*.92, size*1.40), fill="#858A96")
+        avatar = self._mosaic(("102210", "023320", "132231", "112210", "220122", "321123"), (size, size))
         mask = Image.new("L", avatar.size)
         ImageDraw.Draw(mask).ellipse((0, 0, size-1, size-1), fill=255)
         image.paste(avatar, (x, y), mask)
@@ -165,19 +162,18 @@ class ThreadsScreen:
             draw.line((cx-arm, cy, cx+arm, cy), fill="#101010", width=stroke)
             draw.line((cx, cy-arm, cx, cy+arm), fill="#101010", width=stroke)
 
-    def _header(self, draw, page, y, ink, muted):
+    def _header(self, image, draw, page, y, muted):
         x = self.pad + self.avatar + self.avatar_gap
         right = self.width - self.pad - round(self.size * 1.7)
-        author = str(page.meta.get("author") or "threads_user").lstrip("@")
         label = str(page.meta.get("timestamp") or "")
         verified = page.meta.get("verified") is True
         gap = self.size * .36
         badge = self.size * .78 if verified else 0
-        label_width = min(self.font.getlength(label), max(0, (right-x)*.35))
-        name_width = right - x - badge - (gap + label_width if label else 0)
-        name = self._ellipsize(author, self.name_font, name_width)
-        draw.text((x, y), name, font=self.name_font, anchor="lm", fill=ink)
-        x += self.name_font.getlength(name)
+        name_width = round(self.size * 4.8)
+        name_height = round(self.size * .76)
+        name_mask = self._mosaic(("2131023212", "1322131023", "3021312301"), (name_width, name_height))
+        image.paste(name_mask, (x, round(y-name_height/2)))
+        x += name_width
         if verified:
             r = self.size*.24
             cx = x + gap + r
@@ -242,7 +238,7 @@ class ThreadsScreen:
         av_y = top + self.pad
         self._avatar(img, d, self.pad, av_y, follow=not comment)
         header_y = av_y + (self.line_h/2 if comment else self.avatar/2)
-        self._header(d, page, header_y, ink, muted)
+        self._header(img, d, page, header_y, muted)
         x = self._text_left(comment)
         y = top + body_top
         for line in lines:
