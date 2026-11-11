@@ -289,8 +289,8 @@ class ThreadsScreen:
     def media_card(self, width: int, height: int, path: Path) -> tuple[int, int]:
         """Save the transparent shell and return the maximum dimensions of its media."""
         padding = self.pad
-        content_width = max(2, self.width - 2 * padding)
-        content_height = min(self.height - 2 * padding, round(height * content_width / width))
+        content_width = max(2, int(self.width * .9) // 2 * 2)
+        content_height = min(self.height - 2 * padding, math.ceil(height * content_width / width / 2) * 2)
         content_height = max(2, content_height // 2 * 2)
         card = Image.new("RGBA", (self.width, content_height + 2 * padding))
         self._draw_card_background(ImageDraw.Draw(card), (0, 0, card.width-1, card.height-1))

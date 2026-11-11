@@ -159,7 +159,7 @@ def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypat
     screen = ThreadsScreen(settings, Path(settings.caption_font))
     for at, item, channel in ((still.at + .5, still, 0),
                               (clip.at + still.duration + .5, clip, 2)):
-        assert item.fit_size[0] == screen.width - 2 * screen.pad
+        assert item.fit_size[0] == int(screen.width * .9) // 2 * 2
         assert pixel(at, (180, 320))[channel] > 200
         assert max(pixel(at, (screen.x + 6, 320))) < 40  # black frame around media
         r, g, b = pixel(at, (screen.x - 8, 320))
