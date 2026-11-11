@@ -4,7 +4,7 @@
   "topic": "Bắc Ninh hay Bắc Linh?",
   "title": "Bắc Ninh hay Bắc Linh? Dân Threads trả lời",
   "hook_text": "",
-  "description": "Ví dụ dựng video dọc từ ảnh chụp một bài đăng Threads. Kịch bản gồm bài gốc, bốn bình luận trong luồng chính và ba bài trích dẫn ở cột bên. Tên tài khoản dùng bí danh. Thời gian và lượt tương tác là số hiển thị trong ảnh chụp. Giá trị null là số lượt tương tác không đọc được hoặc không hiển thị trong ảnh.",
+  "description": "Ví dụ dựng video dọc từ ảnh chụp một bài đăng Threads. Kịch bản gồm bài gốc, bốn bình luận trong luồng chính và ba bài trích dẫn ở cột bên. Tên tài khoản dùng bí danh. Thời gian và lượt tương tác là số hiển thị trong ảnh chụp. Giá trị null là số lượt tương tác không đọc được hoặc không hiển thị trong ảnh. Ảnh và video là minh họa đi kèm ví dụ.",
   "category": "entertainment",
   "hashtags": [
     "#Threads",
@@ -32,7 +32,19 @@
         "likes": "1,7K",
         "replies": 98,
         "reposts": 69,
-        "shares": 405
+        "shares": 405,
+        "media": [
+          {
+            "kind": "image",
+            "src": "threads-media/bac-ninh.jpg",
+            "duration": 2.5
+          },
+          {
+            "kind": "video",
+            "src": "threads-media/bac-ninh.mp4",
+            "duration": 2
+          }
+        ]
       }
     },
     {

@@ -587,7 +587,7 @@ Common options: `--source queue|search|trending|wikipedia|reddit|rss|file|niche`
 **Your own script:** every video folder has a `script.json`. Edit the narration, title or image prompts and render it again with `make --script path/to/script.json`. The files in [`examples/`](https://github.com/Chamanrajragu/purffle-shorts/tree/main/examples) show the format.
 
 **Threads attachments.** Add an optional `media` array inside any scene's `thread` object (see
-[`examples/threads-post.json`](examples/threads-post.json) for a complete text-only script).
+[`examples/threads-post.json`](examples/threads-post.json) for a complete script with media attachments).
 
 ```json
 {
