@@ -1,6 +1,6 @@
 """Threads post/comment cards, shared by the video renderer and Studio preview.
 
-Author names and avatars use fixed mosaics in rendered cards. Long text
+Author names and avatars use fixed flat shapes in rendered cards. Long text
 continues on another card without shrinking the type.
 """
 from __future__ import annotations
@@ -161,14 +161,13 @@ class ThreadsScreen:
     def __init__(self, settings, font_path: Path | None):
         self.s = settings
         self.fp = str(font_path) if font_path else None
-        self.width = int(min(settings.width * .88, settings.unit * .95)) // 2 * 2
+        self.width = round(settings.width * .75 / 2) * 2
         self.height = int(settings.height * .76) // 2 * 2
         self.x = (settings.width - self.width) // 2
         self.y = (settings.height - self.height) // 2
-        self.size = max(12, round(settings.unit * .036))
+        self.size = max(8, round(settings.unit * 25 / 1080))
         self.pad = round(self.size * 1.6)
         self.font = load_font(self.fp, self.size, 450)
-        self.small = load_font(self.fp, max(10, round(self.size * .84)), 450)
         self.line_h = math.ceil(self.size * 1.4)
         self.avatar = round(self.size * 2.4)
         self.avatar_gap = round(self.size * .8)
@@ -215,30 +214,20 @@ class ThreadsScreen:
                                         meta, index, part + 1, parts))
         return pages
 
-    @staticmethod
-    def _mosaic(pattern, size):
-        palette = ((57, 59, 64), (86, 89, 95), (116, 120, 128), (149, 153, 162))
-        tiles = Image.new("RGB", (len(pattern[0]), len(pattern)))
-        tiles.putdata([palette[int(tile)] for row in pattern for tile in row])
-        return tiles.resize(size, Image.Resampling.NEAREST)
-
-    def _avatar(self, image, draw, x, y, follow):
+    def _avatar(self, draw, x, y, follow):
         size = self.avatar
-        avatar = self._mosaic(("102210", "023320", "132231", "112210", "220122", "321123"), (size, size))
-        mask = Image.new("L", avatar.size)
-        ImageDraw.Draw(mask).ellipse((0, 0, size-1, size-1), fill=255)
-        image.paste(avatar, (x, y), mask)
+        draw.ellipse((x, y, x+size-1, y+size-1), fill="#3C4046")
         if follow:
             cx, cy = x+size*.83, y+size*.82
             r = size*.25
             draw.ellipse((cx-r, cy-r, cx+r, cy+r), fill="#FFFFFF",
-                         outline="#101010", width=max(1, round(self.size*.1)))
+                         outline="#000000", width=max(1, round(self.size*.1)))
             arm = size*.11
             stroke = max(1, round(self.size*.08))
-            draw.line((cx-arm, cy, cx+arm, cy), fill="#101010", width=stroke)
-            draw.line((cx, cy-arm, cx, cy+arm), fill="#101010", width=stroke)
+            draw.line((cx-arm, cy, cx+arm, cy), fill="#000000", width=stroke)
+            draw.line((cx, cy-arm, cx, cy+arm), fill="#000000", width=stroke)
 
-    def _header(self, image, draw, page, y, muted):
+    def _header(self, draw, page, y, muted):
         x = self.pad + self.avatar + self.avatar_gap
         right = self.width - self.pad - round(self.size * 1.7)
         label = str(page.meta.get("timestamp") or "")
@@ -247,8 +236,9 @@ class ThreadsScreen:
         badge = self.size * .78 if verified else 0
         name_width = round(self.size * 4.8)
         name_height = round(self.size * .76)
-        name_mask = self._mosaic(("2131023212", "1322131023", "3021312301"), (name_width, name_height))
-        image.paste(name_mask, (x, round(y-name_height/2)))
+        top = round(y - name_height / 2)
+        draw.rounded_rectangle((x, top, x+name_width-1, top+name_height-1),
+                               radius=max(1, round(self.size * .12)), fill="#3C4046")
         x += name_width
         if verified:
             r = self.size*.24
@@ -282,14 +272,14 @@ class ThreadsScreen:
         count_budget = (available - (self.icon_size + count_gap) * len(ICONS)
                         - gap * (len(ICONS) - 1))
         counts = [page.meta.get(key) for key in ICONS]
-        labels = ["—" if count in (None, "") else str(count) for count in counts]
-        if sum(self.small.getlength(label) for label in labels) > count_budget:
-            labels = [self._ellipsize(label, self.small, count_budget / len(ICONS)) for label in labels]
+        labels = [" " if count is None or str(count).strip() == "" else str(count) for count in counts]
+        if sum(self.font.getlength(label) for label in labels) > count_budget:
+            labels = [self._ellipsize(label, self.font, count_budget / len(ICONS)) for label in labels]
         for path, label in zip(ICONS.values(), labels):
             draw_icon(draw, path, x, y, self.icon_size, color, max(1, round(self.size*.105)))
             x += self.icon_size + count_gap
-            draw.text((x, y+self.icon_size/2), label, font=self.small, anchor="lm", fill=color)
-            x += self.small.getlength(label) + gap
+            draw.text((x, y+self.icon_size/2), label, font=self.font, anchor="lm", fill=color)
+            x += self.font.getlength(label) + gap
 
     def card_height(self, page: ThreadPage) -> int:
         comment = page.meta.get("kind") == "comment"
@@ -308,16 +298,16 @@ class ThreadsScreen:
         ink, muted = "#F3F5F7", "#777777"
         bounds = (0, top, self.width-1, bottom)
         if comment:
-            d.rectangle(bounds, fill="#101010")
+            d.rectangle(bounds, fill="#000000")
             d.line((0, top, self.width-1, top), fill="#262626")
             d.line((0, bottom, self.width-1, bottom), fill="#262626")
         else:
-            d.rounded_rectangle(bounds, radius=round(self.size*1.6), fill="#101010",
+            d.rounded_rectangle(bounds, radius=round(self.size*1.6), fill="#000000",
                                 outline="#262626", width=max(1, round(self.size*.05)))
         av_y = top + self.pad
-        self._avatar(img, d, self.pad, av_y, follow=not comment)
+        self._avatar(d, self.pad, av_y, follow=not comment)
         header_y = av_y + (self.line_h/2 if comment else self.avatar/2)
-        self._header(img, d, page, header_y, muted)
+        self._header(d, page, header_y, muted)
         x = self._text_left(comment)
         y = top + body_top
         for line in lines:
@@ -326,7 +316,7 @@ class ThreadsScreen:
         self._actions(d, page, x, y+self.actions_gap)
         if page.parts > 1:
             d.text((self.width-self.pad, bottom-self.pad*.3), f"{page.part}/{page.parts}",
-                   font=self.small, anchor="rs", fill=muted)
+                   font=self.font, anchor="rs", fill=muted)
         return img
 
     def build(self, scenes, starts, total: float, work: Path, cast=(), *, pages=None):

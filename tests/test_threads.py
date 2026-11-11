@@ -60,6 +60,18 @@ def test_threads_cards_hide_identity_without_leaking_name_length(settings):
         assert screen.render(page).tobytes() == original.tobytes()
 
 
+def test_threads_card_uses_black_background_and_scaled_dimensions(settings):
+    settings = settings.with_overrides(resolution=(1080, 1920))
+    screen = ThreadsScreen(settings, Path(settings.caption_font))
+    assert (screen.width, screen.font.size) == (810, 25)
+    for page in screen.pages(thread_script(settings).scenes):
+        image = screen.render(page)
+        _, top, _, bottom = image.getbbox()
+        assert image.getpixel((screen.width // 2, bottom - 3)) == (0, 0, 0, 255)
+        avatar_center = (screen.pad + screen.avatar // 2, top + screen.pad + screen.avatar // 2)
+        assert image.getpixel(avatar_center) == (60, 64, 70, 255)
+
+
 def test_threads_action_row_displays_all_four_counts(settings):
     settings = settings.with_overrides(resolution=(360, 640))
     screen = ThreadsScreen(settings, Path(settings.caption_font))
@@ -68,7 +80,7 @@ def test_threads_action_row_displays_all_four_counts(settings):
         page.meta.update(likes="1,7K", replies=0, reposts=None, shares=405)
         draw = Mock()
         screen._actions(draw, page, screen._text_left(page.meta["kind"] == "comment"), 0)
-        assert [call.args[1] for call in draw.text.call_args_list] == ["1,7K", "0", "—", "405"]
+        assert [call.args[1] for call in draw.text.call_args_list] == ["1,7K", "0", " ", "405"]
 
 
 @needs_ffmpeg
