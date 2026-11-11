@@ -1,7 +1,7 @@
 """Threads post/comment cards, shared by the video renderer and Studio preview.
 
-No remote avatars or engagement figures are invented. Each scene supplies its own
-``thread`` metadata; long text continues on another card without shrinking the type.
+Author names and avatars use fixed mosaics in rendered cards. Long text
+continues on another card without shrinking the type.
 """
 from __future__ import annotations
 
@@ -29,8 +29,8 @@ def resolve_threads_font(settings):
 ICONS = {
     "likes": "M 12 21 C 10 19 2 14 2 8 C 2 2 9 1 12 6 C 15 1 22 2 22 8 C 22 14 14 19 12 21 Z",
     "replies": "M 12 2 C 6 2 2 6 2 11 C 2 16 6 20 12 20 C 14 20 16 20 18 19 L 22 22 L 21 16 C 24 9 20 2 12 2 Z",
-    "reposts": "M 3 9 L 3 6 C 3 4 5 3 7 3 L 18 3 L 15 0 M 18 3 L 15 6 M 21 15 L 21 18 C 21 20 19 21 17 21 L 6 21 L 9 24 M 6 21 L 9 18",
-    "shares": "M 2 3 L 23 1 L 15 23 L 10 13 L 2 3 Z M 10 13 L 23 1",
+    "reposts": "M 2 3 L 2 9 L 8 9 M 2 9 C 5 0 17 0 21 8 M 22 21 L 22 15 L 16 15 M 22 15 C 19 24 7 24 3 16",
+    "shares": "M 4 2 L 21 10 C 23 11 23 13 21 14 L 4 22 C 2 23 1 21 2 19 L 5 12 L 2 5 C 1 3 2 1 4 2 Z M 5 12 L 22 12",
 }
 
 
@@ -89,27 +89,39 @@ class ThreadsScreen:
         self.height = int(settings.height * .76) // 2 * 2
         self.x = (settings.width - self.width) // 2
         self.y = (settings.height - self.height) // 2
-        self.pad = max(12, round(settings.unit * .035))
         self.size = max(12, round(settings.unit * .036))
+        self.pad = round(self.size * 1.6)
         self.font = load_font(self.fp, self.size, 450)
-        self.name_font = load_font(self.fp, self.size, 700)
-        self.small = load_font(self.fp, max(10, round(self.size * .78)), 450)
-        self.line_h = math.ceil(self.size * 1.42)
-        self.avatar = round(self.size * 1.7)
-        self.body_y = self.pad + self.avatar + round(self.size * .65)
-        self.footer_h = round(self.size * 2.1)
-        self.max_lines = max(1, (self.height - self.body_y - self.footer_h - self.pad) // self.line_h)
+        self.small = load_font(self.fp, max(10, round(self.size * .84)), 450)
+        self.line_h = math.ceil(self.size * 1.4)
+        self.avatar = round(self.size * 2.4)
+        self.avatar_gap = round(self.size * .8)
+        self.actions_gap = round(self.size * .85)
+        self.icon_size = round(self.size * 1.13)
+        self.footer_h = self.actions_gap + self.icon_size + self.pad
+        self.max_lines = self._max_lines(False)
 
-    def lines(self, text):
+    def _body_top(self, comment):
+        if comment:
+            return self.pad + round(self.size * 1.45)
+        return self.pad + self.avatar + round(self.size * .95)
+
+    def _max_lines(self, comment):
+        return max(1, (self.height - self._body_top(comment) - self.footer_h) // self.line_h)
+
+    def lines(self, text, comment=False):
+        width = self.width - self.pad - self._text_left(comment)
         lines = []
         for para in str(text).split("\n"):
-            # Character wrapping also handles URLs and CJK without overflowing the card.
-            for line in _wrap(para, self.font, self.width - 2 * self.pad):
-                if self.font.getlength(line) > self.width - 2 * self.pad:
-                    lines.extend(_wrap(line, self.font, self.width - 2 * self.pad, by_char=True))
+            for line in _wrap(para, self.font, width):
+                if self.font.getlength(line) > width:
+                    lines.extend(_wrap(line, self.font, width, by_char=True))
                 else:
                     lines.append(line)
         return lines
+
+    def _text_left(self, comment):
+        return self.pad + (self.avatar + self.avatar_gap if comment else 0)
 
     def pages(self, scenes, cast=()):
         pages = []
@@ -118,65 +130,124 @@ class ThreadsScreen:
             meta.setdefault("kind", "post" if index == 0 else "comment")
             meta.setdefault("author", (cast[0] if cast else "threads_user") if meta["kind"] == "post" else "reader")
             text = str(meta.get("text") or scene.narration)
-            lines = self.lines(text)
-            parts = math.ceil(len(lines) / self.max_lines)
+            comment = meta["kind"] == "comment"
+            lines = self.lines(text, comment)
+            max_lines = self._max_lines(comment)
+            parts = math.ceil(len(lines) / max_lines)
             for part in range(parts):
-                pages.append(ThreadPage("\n".join(lines[part*self.max_lines:(part+1)*self.max_lines]),
+                pages.append(ThreadPage("\n".join(lines[part*max_lines:(part+1)*max_lines]),
                                         meta, index, part + 1, parts))
         return pages
 
+    @staticmethod
+    def _mosaic(pattern, size):
+        palette = ((57, 59, 64), (86, 89, 95), (116, 120, 128), (149, 153, 162))
+        tiles = Image.new("RGB", (len(pattern[0]), len(pattern)))
+        tiles.putdata([palette[int(tile)] for row in pattern for tile in row])
+        return tiles.resize(size, Image.Resampling.NEAREST)
+
+    def _avatar(self, image, draw, x, y, follow):
+        size = self.avatar
+        avatar = self._mosaic(("102210", "023320", "132231", "112210", "220122", "321123"), (size, size))
+        mask = Image.new("L", avatar.size)
+        ImageDraw.Draw(mask).ellipse((0, 0, size-1, size-1), fill=255)
+        image.paste(avatar, (x, y), mask)
+        if follow:
+            cx, cy = x+size*.83, y+size*.82
+            r = size*.25
+            draw.ellipse((cx-r, cy-r, cx+r, cy+r), fill="#FFFFFF",
+                         outline="#101010", width=max(1, round(self.size*.1)))
+            arm = size*.11
+            stroke = max(1, round(self.size*.08))
+            draw.line((cx-arm, cy, cx+arm, cy), fill="#101010", width=stroke)
+            draw.line((cx, cy-arm, cx, cy+arm), fill="#101010", width=stroke)
+
+    def _header(self, image, draw, page, y, muted):
+        x = self.pad + self.avatar + self.avatar_gap
+        right = self.width - self.pad - round(self.size * 1.7)
+        label = str(page.meta.get("timestamp") or "")
+        verified = page.meta.get("verified") is True
+        gap = self.size * .36
+        badge = self.size * .78 if verified else 0
+        name_width = round(self.size * 4.8)
+        name_height = round(self.size * .76)
+        name_mask = self._mosaic(("2131023212", "1322131023", "3021312301"), (name_width, name_height))
+        image.paste(name_mask, (x, round(y-name_height/2)))
+        x += name_width
+        if verified:
+            r = self.size*.24
+            cx = x + gap + r
+            draw.ellipse((cx-r, y-r, cx+r, y+r), fill="#0095F6")
+            draw.line([(cx-r*.5, y), (cx-r*.1, y+r*.4), (cx+r*.55, y-r*.4)],
+                      fill="white", width=max(1, self.size//16))
+            x += badge
+        label = self._ellipsize(label, self.font, right-x-gap)
+        draw.text((x+gap, y), label, font=self.font, anchor="lm", fill=muted)
+        for index in range(3):
+            cx = self.width - self.pad - self.size*.44*index
+            r = max(1, self.size*.1)
+            draw.ellipse((cx-r, y-r, cx+r, y+r), fill=muted)
+
+    @staticmethod
+    def _ellipsize(text, font, width):
+        if font.getlength(text) <= width:
+            return text
+        if font.getlength("…") > width:
+            return ""
+        while text and font.getlength(text+"…") > width:
+            text = text[:-1]
+        return text+"…"
+
+    def _actions(self, draw, page, x, y):
+        color = "#C7C7C7"
+        gap = self.size * 1.65
+        count_gap = self.size * .32
+        right = self.width - self.pad
+        for index, (key, path) in enumerate(ICONS.items()):
+            draw_icon(draw, path, x, y, self.icon_size, color, max(1, round(self.size*.105)))
+            x += self.icon_size
+            remaining = len(ICONS) - index - 1
+            count = page.meta.get(key)
+            if count not in (None, "", 0, "0"):
+                room = right - x - count_gap - remaining*(self.icon_size+gap)
+                label = self._ellipsize(str(count), self.small, min(room, self.size*3))
+                if label:
+                    x += count_gap
+                    draw.text((x, y+self.icon_size/2), label, font=self.small, anchor="lm", fill=color)
+                    x += self.small.getlength(label)
+            x += gap
+
     def render(self, page: ThreadPage):
+        comment = page.meta.get("kind") == "comment"
         lines = page.text.split("\n")
-        card_h = self.body_y + len(lines) * self.line_h + self.footer_h + self.pad
+        body_top = self._body_top(comment)
+        card_h = body_top + len(lines) * self.line_h + self.footer_h
         img = Image.new("RGBA", (self.width, self.height))
         d = ImageDraw.Draw(img)
         top = (self.height - card_h) // 2
-        p = self.pad
-        ink, grey = "#F3F5F7", "#777777"
-        d.rounded_rectangle((0, top, self.width-1, top+card_h-1), radius=round(self.size*.65), fill="#101010")
-        av_y = top+p
-        d.ellipse((p, av_y, p+self.avatar, av_y+self.avatar), fill="#353535")
-        author = str(page.meta.get("author") or "threads_user").lstrip("@")
-        d.text((p+self.avatar/2, av_y+self.avatar/2), author[:1].upper(), font=self.name_font, anchor="mm", fill=ink)
-        x = p+self.avatar+round(self.size*.45)
-        name = author
-        max_name = self.width-x-p-self.size*4
-        while name and self.name_font.getlength(name) > max_name:
-            name = name[:-1]
-        if name != author:
-            name = name[:-1] + "…"
-        d.text((x, av_y+self.avatar*.3), name, font=self.name_font, anchor="lm", fill=ink)
-        if page.meta.get("verified") is True:
-            cx, cy, r = x+self.name_font.getlength(name)+self.size*.45, av_y+self.avatar*.3, self.size*.24
-            d.ellipse((cx-r, cy-r, cx+r, cy+r), fill="#0095F6")
-            d.line([(cx-r*.5, cy), (cx-r*.1, cy+r*.4), (cx+r*.55, cy-r*.4)], fill="white", width=max(1, self.size//16))
-        label = str(page.meta.get("timestamp") or ("Bài viết" if page.meta.get("kind") == "post" else "Bình luận"))[:40]
-        d.text((x, av_y+self.avatar*.85), label, font=self.small, anchor="lm", fill=grey)
-        for k in range(3):
-            cx, cy, r = self.width-p-self.size*.25*k, av_y+self.size*.45, max(1, self.size*.055)
-            d.ellipse((cx-r, cy-r, cx+r, cy+r), fill=grey)
-        y = top+self.body_y
+        bottom = top + card_h - 1
+        ink, muted = "#F3F5F7", "#777777"
+        bounds = (0, top, self.width-1, bottom)
+        if comment:
+            d.rectangle(bounds, fill="#101010")
+            d.line((0, top, self.width-1, top), fill="#262626")
+            d.line((0, bottom, self.width-1, bottom), fill="#262626")
+        else:
+            d.rounded_rectangle(bounds, radius=round(self.size*1.6), fill="#101010",
+                                outline="#262626", width=max(1, round(self.size*.05)))
+        av_y = top + self.pad
+        self._avatar(img, d, self.pad, av_y, follow=not comment)
+        header_y = av_y + (self.line_h/2 if comment else self.avatar/2)
+        self._header(img, d, page, header_y, muted)
+        x = self._text_left(comment)
+        y = top + body_top
         for line in lines:
-            d.text((p, y), line, font=self.font, fill=ink)
+            d.text((x, y+self.line_h/2), line, font=self.font, anchor="lm", fill=ink)
             y += self.line_h
-        y += round(self.size*.55)
-        icon_size = self.size*.92
-        slot = (self.width-2*p)/4
-        for index, (key, path) in enumerate(ICONS.items()):
-            x = p+index*slot
-            draw_icon(d, path, x, y, icon_size, ink, max(1, round(self.size*.065)))
-            count = str(page.meta.get(key, ""))[:12]
-            available = slot-icon_size-self.size*.45
-            if self.small.getlength(count) > available:
-                while count and self.small.getlength(count+"…") > available:
-                    count = count[:-1]
-                count += "…"
-            x += icon_size + self.size*.2
-            if count:
-                d.text((x, y+icon_size/2), count, font=self.small, anchor="lm", fill=ink)
+        self._actions(d, page, x, y+self.actions_gap)
         if page.parts > 1:
-            d.text((self.width-p, top+card_h-self.pad*.45), f"{page.part}/{page.parts}",
-                   font=self.small, anchor="rs", fill=grey)
+            d.text((self.width-self.pad, bottom-self.pad*.3), f"{page.part}/{page.parts}",
+                   font=self.small, anchor="rs", fill=muted)
         return img
 
     def build(self, scenes, starts, total: float, work: Path, cast=()):
