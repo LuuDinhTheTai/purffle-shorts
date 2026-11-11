@@ -200,22 +200,20 @@ class ThreadsScreen:
 
     def _actions(self, draw, page, x, y):
         color = "#C7C7C7"
-        gap = self.size * 1.65
+        gap = self.size * 1.25
         count_gap = self.size * .32
-        right = self.width - self.pad
-        for index, (key, path) in enumerate(ICONS.items()):
+        available = self.width - self.pad - x
+        count_budget = (available - (self.icon_size + count_gap) * len(ICONS)
+                        - gap * (len(ICONS) - 1))
+        counts = [page.meta.get(key) for key in ICONS]
+        labels = ["—" if count in (None, "") else str(count) for count in counts]
+        if sum(self.small.getlength(label) for label in labels) > count_budget:
+            labels = [self._ellipsize(label, self.small, count_budget / len(ICONS)) for label in labels]
+        for path, label in zip(ICONS.values(), labels):
             draw_icon(draw, path, x, y, self.icon_size, color, max(1, round(self.size*.105)))
-            x += self.icon_size
-            remaining = len(ICONS) - index - 1
-            count = page.meta.get(key)
-            if count not in (None, "", 0, "0"):
-                room = right - x - count_gap - remaining*(self.icon_size+gap)
-                label = self._ellipsize(str(count), self.small, min(room, self.size*3))
-                if label:
-                    x += count_gap
-                    draw.text((x, y+self.icon_size/2), label, font=self.small, anchor="lm", fill=color)
-                    x += self.small.getlength(label)
-            x += gap
+            x += self.icon_size + count_gap
+            draw.text((x, y+self.icon_size/2), label, font=self.small, anchor="lm", fill=color)
+            x += self.small.getlength(label) + gap
 
     def render(self, page: ThreadPage):
         comment = page.meta.get("kind") == "comment"

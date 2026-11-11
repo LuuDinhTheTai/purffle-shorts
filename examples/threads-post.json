@@ -4,11 +4,22 @@
   "topic": "Bắc Ninh hay Bắc Linh?",
   "title": "Bắc Ninh hay Bắc Linh? Dân Threads trả lời",
   "hook_text": "",
-  "description": "Ví dụ dựng video dọc từ ảnh chụp một bài đăng Threads. Kịch bản gồm bài gốc, bốn bình luận trong luồng chính và ba bài trích dẫn ở cột bên. Tên tài khoản dùng bí danh. Thời gian và lượt tương tác là số hiển thị trong ảnh chụp.",
+  "description": "Ví dụ dựng video dọc từ ảnh chụp một bài đăng Threads. Kịch bản gồm bài gốc, bốn bình luận trong luồng chính và ba bài trích dẫn ở cột bên. Tên tài khoản dùng bí danh. Thời gian và lượt tương tác là số hiển thị trong ảnh chụp. Giá trị null là số lượt tương tác không đọc được hoặc không hiển thị trong ảnh.",
   "category": "entertainment",
-  "hashtags": ["#Threads", "#BacNinh", "#Shorts"],
-  "tags": ["Threads Việt Nam", "Bắc Ninh", "Bắc Linh", "bình luận Threads"],
-  "cast": ["tac_gia"],
+  "hashtags": [
+    "#Threads",
+    "#BacNinh",
+    "#Shorts"
+  ],
+  "tags": [
+    "Threads Việt Nam",
+    "Bắc Ninh",
+    "Bắc Linh",
+    "bình luận Threads"
+  ],
+  "cast": [
+    "tac_gia"
+  ],
   "scenes": [
     {
       "narration": "Mng ơi Bắc Ninh có phải tên thật là Bắc Linh nhưng mà do dân ngọng L/N nên mọi người mới viết nhầm không ạ... em hỏi thật",
@@ -46,7 +57,8 @@
         "timestamp": "12 giờ",
         "likes": 229,
         "reposts": 3,
-        "shares": 4
+        "shares": 4,
+        "replies": null
       }
     },
     {
@@ -57,7 +69,9 @@
         "author": "binh_luan_03",
         "timestamp": "15 giờ",
         "likes": 198,
-        "shares": 2
+        "shares": 2,
+        "replies": null,
+        "reposts": null
       }
     },
     {
@@ -66,7 +80,11 @@
       "thread": {
         "kind": "comment",
         "author": "binh_luan_04",
-        "timestamp": "9 giờ"
+        "timestamp": "9 giờ",
+        "likes": null,
+        "replies": null,
+        "reposts": null,
+        "shares": null
       }
     },
     {
@@ -76,7 +94,11 @@
         "kind": "comment",
         "relation": "quote",
         "author": "trich_dan_01",
-        "timestamp": "1 giờ"
+        "timestamp": "1 giờ",
+        "likes": null,
+        "replies": null,
+        "reposts": null,
+        "shares": null
       }
     },
     {
@@ -87,7 +109,11 @@
         "relation": "quote",
         "author": "trich_dan_02",
         "timestamp": "11 giờ",
-        "text": "🗣️: Em người ở đâu?\nMe: Em người Bắc Linh ạ.\n:))do ngọng thui"
+        "text": "🗣️: Em người ở đâu?\nMe: Em người Bắc Linh ạ.\n:))do ngọng thui",
+        "likes": null,
+        "replies": null,
+        "reposts": null,
+        "shares": null
       }
     },
     {
@@ -97,7 +123,11 @@
         "kind": "comment",
         "relation": "quote",
         "author": "trich_dan_03",
-        "timestamp": "14 giờ"
+        "timestamp": "14 giờ",
+        "likes": null,
+        "replies": null,
+        "reposts": null,
+        "shares": null
       }
     }
   ]

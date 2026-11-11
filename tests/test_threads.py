@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from unittest.mock import Mock
 
 from purffle_shorts import ffmpeg
 from purffle_shorts.pipeline import Studio
@@ -55,6 +56,17 @@ def test_threads_cards_hide_identity_without_leaking_name_length(settings):
         original = screen.render(page)
         page.meta.update(author="a_much_longer_username", avatar="private-avatar.jpg")
         assert screen.render(page).tobytes() == original.tobytes()
+
+
+def test_threads_action_row_displays_all_four_counts(settings):
+    settings = settings.with_overrides(resolution=(360, 640))
+    screen = ThreadsScreen(settings, Path(settings.caption_font))
+    pages = screen.pages(thread_script(settings).scenes)
+    for page in pages:
+        page.meta.update(likes="1,7K", replies=0, reposts=None, shares=405)
+        draw = Mock()
+        screen._actions(draw, page, screen._text_left(page.meta["kind"] == "comment"), 0)
+        assert [call.args[1] for call in draw.text.call_args_list] == ["1,7K", "0", "—", "405"]
 
 
 @needs_ffmpeg
