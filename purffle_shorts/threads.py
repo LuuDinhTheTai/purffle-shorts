@@ -19,7 +19,7 @@ from .timing import caption_chunks
 from .utils import download
 
 
-def prepare_attachments(scenes, starts, total, fps, work):
+def prepare_attachments(scenes, starts, total, fps, work, card_sizes):
     """Resolve each scene's attachments in the order they will play."""
     inserts = []
     for index, scene in enumerate(scenes):
@@ -64,7 +64,11 @@ def prepare_attachments(scenes, starts, total, fps, work):
                     raise ValueError(f"{label}: duration must be a positive number of seconds")
                 duration = min(duration, requested) if kind == "video" else requested
             duration = max(1, round(duration * fps)) / fps
-            inserts.append(MediaInsert(at, duration, path, kind, has_audio))
+            fit_size = None
+            if kind == "image":
+                width, height = card_sizes[index]
+                fit_size = (max(2, int(width * .8) // 2 * 2), max(2, int(height * .8) // 2 * 2))
+            inserts.append(MediaInsert(at, duration, path, kind, has_audio, fit_size))
     return inserts
 
 
@@ -287,11 +291,16 @@ class ThreadsScreen:
             draw.text((x, y+self.icon_size/2), label, font=self.small, anchor="lm", fill=color)
             x += self.small.getlength(label) + gap
 
+    def card_height(self, page: ThreadPage) -> int:
+        comment = page.meta.get("kind") == "comment"
+        line_count = page.text.count("\n") + 1 if page.text else 0
+        return self._body_top(comment) + line_count * self.line_h + self.footer_h
+
     def render(self, page: ThreadPage):
         comment = page.meta.get("kind") == "comment"
         lines = page.text.split("\n") if page.text else []
         body_top = self._body_top(comment)
-        card_h = body_top + len(lines) * self.line_h + self.footer_h
+        card_h = self.card_height(page)
         img = Image.new("RGBA", (self.width, self.height))
         d = ImageDraw.Draw(img)
         top = (self.height - card_h) // 2
@@ -320,9 +329,10 @@ class ThreadsScreen:
                    font=self.small, anchor="rs", fill=muted)
         return img
 
-    def build(self, scenes, starts, total: float, work: Path, cast=()):
+    def build(self, scenes, starts, total: float, work: Path, cast=(), *, pages=None):
         work.mkdir(parents=True, exist_ok=True)
-        pages = self.pages(scenes, cast)
+        if pages is None:
+            pages = self.pages(scenes, cast)
         entries = []
         for scene_index in range(len(scenes)):
             scene_pages = [p for p in pages if p.scene == scene_index]

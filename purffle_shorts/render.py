@@ -245,6 +245,7 @@ class MediaInsert:
     path: Path
     kind: str
     has_audio: bool = False
+    fit_size: tuple[int, int] | None = None
 
 
 def _insert_media(settings: Settings, inserts: list[MediaInsert], total: float, video: str, audio: str,
@@ -256,8 +257,7 @@ def _insert_media(settings: Settings, inserts: list[MediaInsert], total: float, 
     filters.append(f"[{video}]format=yuv420p,split={count}" + "".join(f"[basev{i}]" for i in range(count)))
     filters.append(f"[{audio}]asplit={count}" + "".join(f"[basea{i}]" for i in range(count)))
     pairs = []
-    fit = (f"scale={settings.width}:{settings.height}:force_original_aspect_ratio=decrease:"
-           f"force_divisible_by=2,pad={settings.width}:{settings.height}:(ow-iw)/2:(oh-ih)/2,setsar=1")
+    canvas = f"pad={settings.width}:{settings.height}:(ow-iw)/2:(oh-ih)/2,setsar=1"
     audio_format = "aformat=sample_rates=48000:channel_layouts=stereo"
     starts = {at: items for at, items in groups}
 
@@ -269,7 +269,9 @@ def _insert_media(settings: Settings, inserts: list[MediaInsert], total: float, 
             inputs.extend(["-i", str(item.path)])
             name = f"insert{index}"
             duration = f"{item.duration:.9f}"
-            filters.append(f"[{index}:v]{fit},fps={settings.fps},format=yuv420p,"
+            width, height = item.fit_size or settings.resolution
+            fit = f"scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2"
+            filters.append(f"[{index}:v]{fit},{canvas},fps={settings.fps},format=yuv420p,"
                            f"tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},"
                            f"setpts=PTS-STARTPTS[{name}v]")
             source = f"[{index}:a]" if item.has_audio else "anullsrc=r=48000:cl=stereo,"

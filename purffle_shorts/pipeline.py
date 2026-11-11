@@ -455,10 +455,12 @@ class Studio:
                 font = resolve_threads_font(s)
                 screen = ThreadsScreen(s, font)
                 starts = speech.line_starts or [tm.start for tm in timeline]
-                inserts = prepare_attachments(script.scenes, starts, total, s.fps, work / "attachments")
+                pages = screen.pages(script.scenes, script.cast)
+                card_sizes = {page.scene: (screen.width, screen.card_height(page)) for page in pages}
+                inserts = prepare_attachments(script.scenes, starts, total, s.fps, work / "attachments", card_sizes)
                 if inserts:
                     chunks = attachment_captions(speech.words, inserts, s.caption_max_words, total)
-                threads_plan = (screen.build(script.scenes, starts, total, work / "threads", script.cast),
+                threads_plan = (screen.build(script.scenes, starts, total, work / "threads", pages=pages),
                                 screen.x, screen.y)
             plan = build_overlays(s, on_screen, total, script.hook_text, work, labels=labels, chat=messages,
                                   contact=script.speaker_name("A"), card=card, card_until=card_until,

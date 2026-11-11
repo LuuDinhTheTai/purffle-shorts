@@ -139,9 +139,13 @@ def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypat
             return image.convert("RGB").getpixel(xy)
 
     assert max(pixel(still.at - .25, (180, 270))) < 200
-    r, g, b = pixel(still.at + .5, (180, 270))
+    r, g, b = pixel(still.at + .5, (180, 320))
     assert r > 200 and max(g, b) < 30
-    assert max(pixel(still.at + .5, (180, 15))) < 30  # fit, with padding
+    screen = ThreadsScreen(settings, Path(settings.caption_font))
+    first_page = screen.pages(thread_script(settings).scenes)[0]
+    half_card_height = screen.card_height(first_page) // 2
+    assert max(pixel(still.at + .5, (180, 320 - half_card_height))) < 30
+    assert max(pixel(still.at + .5, (screen.x + 1, 320))) < 30
     r, g, b = pixel(clip.at + still.duration + .5, (180, 270))
     assert b > 200 and max(r, g) < 30
     audio = ffmpeg.run(["-ss", str(clip.at + still.duration + .2), "-i", str(result.video), "-t", "0.5",
@@ -149,7 +153,7 @@ def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypat
     peak = next(line for line in audio.splitlines() if "max_volume:" in line)
     assert float(peak.split()[-2]) > -30
     assert max(pixel(final.at + 4 - .25, (180, 270))) < 200
-    r, g, b = pixel(final.at + 4 + .25, (180, 270))
+    r, g, b = pixel(final.at + 4 + .25, (180, 320))
     assert r > 200 and max(g, b) < 30
 
     subtitles = (result.folder / "captions.srt").read_text(encoding="utf-8")

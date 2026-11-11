@@ -604,6 +604,7 @@ Common options: `--source queue|search|trending|wikipedia|reddit|rss|file|niche`
 
 The rendered video shows the card first, then its attachments in array order, then the next card.
 Each attachment gets its own segment, with padding as needed to preserve its aspect ratio.
+Images are centered and fit within 80% of the preceding card's width and height.
 For a media-only post, omit `narration` to show the card without voiceover.
 Images display for 3 seconds by default. Videos play from the beginning with their original audio.
 Set `duration` in seconds to change the image hold or trim a video. Use a local path or a direct
