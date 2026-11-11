@@ -329,15 +329,16 @@ def normalize(data: dict, subject: str, style: str, language: str) -> Script:
     for s in raw_scenes:
         if isinstance(s, str):
             s = {"narration": s}
+        thread = dict(s["thread"]) if isinstance(s.get("thread"), dict) else {}
         narration = clean_narration(str(s.get("narration", "")))
-        if not narration:
+        if not narration and not (style == "threads" and thread.get("media")):
             continue
         query = _clean_tag(s.get("search_query") or "") or subject
         scenes.append(Scene(narration=narration, search_query=truncate_words(query, 60),
                             image_prompt=str(s.get("image_prompt") or query).strip(),
                             speaker=_speaker(s.get("speaker")) if multi else "A",
                             emphasis=_emphasis(s.get("emphasis"), narration), emoji=one_emoji(s.get("emoji")),
-                            thread=dict(s["thread"]) if isinstance(s.get("thread"), dict) else {}))
+                            thread=thread))
     if not scenes:
         raise ValueError("script has no narration")
     limit = 20 if style == "chat" else 12
@@ -629,6 +630,9 @@ def _with_checks(issues: list[str], script: Script, settings: Settings) -> list[
 def translate_script(llm, script: Script, language: str) -> Script:
     lang = LANGUAGES.get(language, language)
     src = {k: v for k, v in script.to_dict().items() if k not in ("style", "language", "score", "review", "rubric")}
+    if script.style == "threads":
+        for scene in src["scenes"]:
+            scene.pop("thread", None)
     system = ("You are a native-level translator and YouTube Shorts adapter. You reply with a single JSON "
               "object and nothing else.")
     user = f"""Adapt this YouTube Short into {lang}.
@@ -649,6 +653,8 @@ Return the same JSON structure."""
         raise ValueError(f"translation to {language} has {len(out.scenes)} scenes, expected {len(script.scenes)}")
     for mine, theirs in zip(out.scenes, script.scenes):
         mine.search_query, mine.image_prompt, mine.speaker = theirs.search_query, theirs.image_prompt, theirs.speaker
+        if script.style == "threads":
+            mine.thread = {key: value for key, value in theirs.thread.items() if key != "text"}
     out.category = script.category
     if script.style in CARD_STYLES:
         out.cast = list(script.cast)  # r/community and u/name are handles, not words to translate
@@ -681,6 +687,9 @@ def localize_metadata(llm, script: Script, languages: list[str]) -> dict[str, di
     if not langs:
         return {}
     names = ", ".join(f"{x} ({LANGUAGES.get(x.split('-')[0], x)})" for x in langs)
+    if script.style == "threads":
+        for scene in src["scenes"]:
+            scene.pop("thread", None)
     system = ("You are a native-level translator for YouTube creators. You reply with a single JSON object "
               "and nothing else.")
     user = f"""Translate this YouTube Short's title and description into each of these languages: {names}.
@@ -710,7 +719,17 @@ def load_script(path: str | Path, settings: Settings) -> Script:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"{path}: expected a JSON object with 'title' and 'scenes'")
-    return script_from_data(data, settings, fallback_subject=Path(path).stem)
+    script = script_from_data(data, settings, fallback_subject=Path(path).stem)
+    if script.style == "threads":
+        base = Path(path).resolve().parent
+        for scene in script.scenes:
+            media = scene.thread.get("media")
+            if isinstance(media, list):
+                for item in media:
+                    src = item.get("src") if isinstance(item, dict) else None
+                    if isinstance(src, str) and src.strip() and not src.startswith(("http://", "https://")):
+                        item["src"] = str((base / Path(src).expanduser()).resolve())
+    return script
 
 
 def script_from_data(data: dict, settings: Settings, fallback_subject: str = "my video") -> Script:

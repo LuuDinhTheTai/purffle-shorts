@@ -449,11 +449,15 @@ class Studio:
                 if sc.emoji and not chat and not threads and not (card and k == 0):
                     emoji.append((tm.start + 0.05, min(tm.end, tm.start + 1.65), sc.emoji))
             threads_plan = None
+            inserts = []
             if threads:
-                from .threads import ThreadsScreen, resolve_threads_font
+                from .threads import ThreadsScreen, attachment_captions, prepare_attachments, resolve_threads_font
                 font = resolve_threads_font(s)
                 screen = ThreadsScreen(s, font)
                 starts = speech.line_starts or [tm.start for tm in timeline]
+                inserts = prepare_attachments(script.scenes, starts, total, s.fps, work / "attachments")
+                if inserts:
+                    chunks = attachment_captions(speech.words, inserts, s.caption_max_words, total)
                 threads_plan = (screen.build(script.scenes, starts, total, work / "threads", script.cast),
                                 screen.x, screen.y)
             plan = build_overlays(s, on_screen, total, script.hook_text, work, labels=labels, chat=messages,
@@ -467,15 +471,20 @@ class Studio:
                                      message_starts=speech.line_starts if messages else None,
                                      hook=bool(plan.hook_until or plan.card_until))
             render_video(s, media, [st.duration for st in shots], speech.audio, total, plan, video, work, joins,
-                         progress=self._sub, effects=effects, background=background if split else None)
+                         progress=self._sub, effects=effects, background=background if split else None,
+                         inserts=inserts or None)
 
             self._step("check")
             info = ffmpeg.probe(video)
-            if (info["width"], info["height"]) != s.resolution or abs(info["duration"] - total) > 0.5:
+            output_total = total + sum(item.duration for item in inserts)
+            if (info["width"], info["height"]) != s.resolution or abs(info["duration"] - output_total) > 0.5:
                 raise RuntimeError(f"Render check failed: got {info['width']}x{info['height']} "
-                                   f"{info['duration']:.2f}s, expected {s.width}x{s.height} {total:.2f}s")
-            cover_at = pick_cover(video, folder / "cover.jpg", work, total=total, avoid=[st.start for st in shots[1:]],
-                                  until=card_until or plan.hook_until or min(2.8, total * 0.4))
+                                   f"{info['duration']:.2f}s, expected {s.width}x{s.height} {output_total:.2f}s")
+            cover_until = card_until or plan.hook_until or min(2.8, total * 0.4)
+            if inserts:
+                cover_until = min(cover_until, inserts[0].at)
+            cover_at = pick_cover(video, folder / "cover.jpg", work, total=output_total,
+                                  avoid=[st.start for st in shots[1:]], until=cover_until)
             (folder / "captions.srt").write_text(srt(chunks), encoding="utf-8")
 
             title = final_title(script, s)

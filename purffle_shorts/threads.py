@@ -10,9 +10,81 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 
+from . import ffmpeg
 from .overlays import _wrap, load_font
+from .render import MediaInsert
+from .timing import caption_chunks
+from .utils import download
+
+
+def prepare_attachments(scenes, starts, total, fps, work):
+    """Resolve each scene's attachments in the order they will play."""
+    inserts = []
+    for index, scene in enumerate(scenes):
+        attachments = scene.thread.get("media")
+        if attachments is None:
+            continue
+        if not isinstance(attachments, list):
+            raise ValueError(f"Scene {index + 1}: thread.media must be a list")
+        # Cut on a video frame just before the next line of speech.
+        at = math.floor(starts[index+1] * fps) / fps if index+1 < len(starts) else total
+        for number, attachment in enumerate(attachments, 1):
+            label = f"Scene {index + 1}, attachment {number}"
+            kind = attachment.get("kind") if isinstance(attachment, dict) else None
+            src = attachment.get("src") if isinstance(attachment, dict) else None
+            if kind not in ("image", "video") or not isinstance(src, str) or not src.strip():
+                raise ValueError(f"{label}: expected kind (image or video) and src")
+            dest = work / f"attachment-{index+1}-{number}"
+            work.mkdir(parents=True, exist_ok=True)
+            if src.startswith(("http://", "https://")):
+                path = download(src, dest)
+            else:
+                path = Path(src).expanduser().resolve()
+                if not path.is_file():
+                    raise ValueError(f"{label}: media file does not exist: {path}")
+            if kind == "image":
+                with Image.open(path) as image:
+                    rgba = ImageOps.exif_transpose(image).convert("RGBA")
+                    rgb = Image.new("RGB", rgba.size)
+                    rgb.paste(rgba, mask=rgba.getchannel("A"))
+                    path = dest.with_suffix(".png")
+                    rgb.save(path)
+                duration, has_audio = 3.0, False
+            else:
+                info = ffmpeg.probe(path)
+                duration, has_audio = info["duration"], info["has_audio"]
+                if not info["has_video"] or not math.isfinite(duration) or duration <= 0:
+                    raise ValueError(f"{label}: expected a video with a known duration")
+            requested = attachment.get("duration")
+            if requested is not None:
+                if (not isinstance(requested, (float, int)) or isinstance(requested, bool)
+                        or not math.isfinite(requested) or requested <= 0):
+                    raise ValueError(f"{label}: duration must be a positive number of seconds")
+                duration = min(duration, requested) if kind == "video" else requested
+            duration = max(1, round(duration * fps)) / fps
+            inserts.append(MediaInsert(at, duration, path, kind, has_audio))
+    return inserts
+
+
+def attachment_captions(words, inserts, max_words, total):
+    """Keep subtitles in sync and leave attachment intervals free of narration captions."""
+    chunks = []
+    start = offset = 0.0
+    durations = {}
+    for item in inserts:
+        durations[item.at] = durations.get(item.at, 0.0) + item.duration
+    for end, duration in [*durations.items(), (total, 0.0)]:
+        if end > start:
+            group = [word for word in words if start <= word.start < end]
+            for chunk in caption_chunks(group, max_words, total=end):
+                chunk.start += offset
+                chunk.end = min(chunk.end, end) + offset
+                chunks.append(chunk)
+        start = end
+        offset += duration
+    return chunks
 
 
 def resolve_threads_font(settings):
@@ -217,7 +289,7 @@ class ThreadsScreen:
 
     def render(self, page: ThreadPage):
         comment = page.meta.get("kind") == "comment"
-        lines = page.text.split("\n")
+        lines = page.text.split("\n") if page.text else []
         body_top = self._body_top(comment)
         card_h = body_top + len(lines) * self.line_h + self.footer_h
         img = Image.new("RGBA", (self.width, self.height))

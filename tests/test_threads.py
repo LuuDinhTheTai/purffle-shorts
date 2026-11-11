@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from unittest.mock import Mock
 
+from PIL import Image
+
 from purffle_shorts import ffmpeg
 from purffle_shorts.pipeline import Studio
 from purffle_shorts.script import Script, script_from_data
@@ -93,3 +95,69 @@ def test_threads_render_from_json_skips_ai_and_uses_timed_cards(settings, monkey
     assert ffmpeg.probe(result.video)["height"] == 640
     assert "Hôm nay" in (result.folder/"captions.srt").read_text(encoding="utf-8")
     assert json.loads((result.folder/"script.json").read_text(encoding="utf-8"))["scenes"][1]["thread"]["author"] == "reader"
+
+
+@needs_ffmpeg
+def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypatch):
+    from purffle_shorts import pipeline
+    from purffle_shorts.render import extract_frame
+
+    Image.new("RGB", (160, 90), "red").save(tmp_path / "photo.png")
+    ffmpeg.run(["-f", "lavfi", "-i", "color=blue:s=160x90:r=24",
+                "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "1.5",
+                "-c:v", "libx264", "-c:a", "aac", str(tmp_path / "clip.mp4")])
+    raw = thread_script(settings).to_dict()
+    raw["scenes"][0]["thread"]["media"] = [
+        {"kind": "image", "src": "photo.png"},
+        {"kind": "video", "src": "clip.mp4", "duration": 1},
+    ]
+    raw["scenes"].append({"thread": {
+        "kind": "comment", "media": [{"kind": "image", "src": "photo.png", "duration": .5}],
+    }})
+    script_file = tmp_path / "script.json"
+    script_file.write_text(json.dumps(raw), encoding="utf-8")
+    settings = settings.with_overrides(offline=True, tts_engine="silent", resolution=(360, 640),
+                                       music_volume=0, fps=24, transition="none")
+    capture = {}
+    render = pipeline.render_video
+
+    def record(*args, **kwargs):
+        capture["total"], capture["inserts"] = args[4], kwargs["inserts"]
+        return render(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline, "render_video", record)
+    result = Studio(settings).make(script_file=script_file, upload=False)
+    assert result.ok, result.error
+    still, clip, final = capture["inserts"]
+    assert [item.duration for item in capture["inserts"]] == [3, 1, .5]
+    assert clip.has_audio and still.at == clip.at < final.at == capture["total"]
+    assert abs(ffmpeg.duration(result.video) - capture["total"] - 4.5) < .15
+
+    def pixel(at, xy):
+        frame = extract_frame(result.video, at, tmp_path / "frame.png")
+        with Image.open(frame) as image:
+            return image.convert("RGB").getpixel(xy)
+
+    assert max(pixel(still.at - .25, (180, 270))) < 200
+    r, g, b = pixel(still.at + .5, (180, 270))
+    assert r > 200 and max(g, b) < 30
+    assert max(pixel(still.at + .5, (180, 15))) < 30  # fit, with padding
+    r, g, b = pixel(clip.at + still.duration + .5, (180, 270))
+    assert b > 200 and max(r, g) < 30
+    audio = ffmpeg.run(["-ss", str(clip.at + still.duration + .2), "-i", str(result.video), "-t", "0.5",
+                        "-vn", "-af", "volumedetect", "-f", "null", "-"], loglevel="info")
+    peak = next(line for line in audio.splitlines() if "max_volume:" in line)
+    assert float(peak.split()[-2]) > -30
+    assert max(pixel(final.at + 4 - .25, (180, 270))) < 200
+    r, g, b = pixel(final.at + 4 + .25, (180, 270))
+    assert r > 200 and max(g, b) < 30
+
+    subtitles = (result.folder / "captions.srt").read_text(encoding="utf-8")
+
+    def seconds(timestamp):
+        h, m, s = timestamp.replace(",", ".").split(":")
+        return int(h) * 3600 + int(m) * 60 + float(s)
+
+    ranges = [tuple(map(seconds, line.split(" --> "))) for line in subtitles.splitlines() if " --> " in line]
+    assert any(start >= still.at + 4 - .001 for start, _ in ranges)
+    assert all(end <= still.at + .001 or start >= still.at + 4 - .001 for start, end in ranges)

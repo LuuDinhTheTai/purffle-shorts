@@ -586,6 +586,32 @@ Common options: `--source queue|search|trending|wikipedia|reddit|rss|file|niche`
 
 **Your own script:** every video folder has a `script.json`. Edit the narration, title or image prompts and render it again with `make --script path/to/script.json`. The files in [`examples/`](https://github.com/Chamanrajragu/purffle-shorts/tree/main/examples) show the format.
 
+**Threads attachments.** Add an optional `media` array inside any scene's `thread` object (see
+[`examples/threads-post.json`](examples/threads-post.json) for a complete text-only script).
+
+```json
+{
+  "narration": "Đây là ảnh và video mình muốn chia sẻ.",
+  "thread": {
+    "kind": "post",
+    "media": [
+      { "kind": "image", "src": "media/photo.jpg", "duration": 3 },
+      { "kind": "video", "src": "media/clip.mp4" }
+    ]
+  }
+}
+```
+
+The rendered video shows the card first, then its attachments in array order, then the next card.
+Each attachment gets its own segment, with padding as needed to preserve its aspect ratio.
+For a media-only post, omit `narration` to show the card without voiceover.
+Images display for 3 seconds by default. Videos play from the beginning with their original audio.
+Set `duration` in seconds to change the image hold or trim a video. Use a local path or a direct
+HTTP(S) media URL for `src`. When rendering with `make --script`, relative paths are resolved from
+the JSON file's directory. For Studio jobs, use absolute paths on the Studio host or direct URLs.
+The Studio card preview shows the text cards. Open the rendered video to play the attachments.
+
+
 **Several channels:** keep one settings file per channel (niche, voice, `YT_TOKEN_FILE`, `DATA_DIR`) and run `python -m purffle_shorts run --env-file .env.channel2`.
 
 **Upgrading from 1.x:** `python YT.py`, `--once`, `--no-upload`, `--count N` and the old `SHORTS_*` variables still work, and `token.pickle` is migrated to `token.json` automatically. Install the new requirements first.

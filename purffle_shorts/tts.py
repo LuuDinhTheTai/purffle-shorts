@@ -459,7 +459,8 @@ def synthesize_lines(lines: list[tuple[str, str]], out_dir: Path, settings: Sett
     cfg = {"A": replace(settings, tts_voice=voice_a), "B": replace(settings, tts_voice=voice_b or voice_a)}
 
     def one(i: int, speaker: str, text: str) -> Speech:
-        return synthesize(text, out_dir / f"line{i:02d}", cfg[speaker])
+        voice_settings = cfg[speaker] if text else replace(settings, tts_engine="silent")
+        return synthesize(text, out_dir / f"line{i:02d}", voice_settings)
 
     workers = 4 if settings.tts_engine in ("edge", "openai", "elevenlabs") else 1
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:

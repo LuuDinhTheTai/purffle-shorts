@@ -10,7 +10,8 @@ import os
 import random
 import sys
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from itertools import groupby
 from pathlib import Path
 
 from . import ffmpeg, sfx
@@ -237,10 +238,59 @@ def mix_audio(settings: Settings, voice: Path, total: float, music: Path | None,
     return out
 
 
+@dataclass(frozen=True)
+class MediaInsert:
+    at: float
+    duration: float
+    path: Path
+    kind: str
+    has_audio: bool = False
+
+
+def _insert_media(settings: Settings, inserts: list[MediaInsert], total: float, video: str, audio: str,
+                  inputs: list[str], filters: list[str]) -> None:
+    """Splice original video/audio between attachments, with no card or voice over an attachment."""
+    groups = [(at, list(items)) for at, items in groupby(inserts, key=lambda item: item.at)]
+    cuts = [0.0, *(at for at, _ in groups if 0 < at < total), total]
+    count = len(cuts) - 1
+    filters.append(f"[{video}]format=yuv420p,split={count}" + "".join(f"[basev{i}]" for i in range(count)))
+    filters.append(f"[{audio}]asplit={count}" + "".join(f"[basea{i}]" for i in range(count)))
+    pairs = []
+    fit = (f"scale={settings.width}:{settings.height}:force_original_aspect_ratio=decrease:"
+           f"force_divisible_by=2,pad={settings.width}:{settings.height}:(ow-iw)/2:(oh-ih)/2,setsar=1")
+    audio_format = "aformat=sample_rates=48000:channel_layouts=stereo"
+    starts = {at: items for at, items in groups}
+
+    def append_media(at: float) -> None:
+        for item in starts.get(at, []):
+            index = inputs.count("-i")
+            if item.kind == "image":
+                inputs.extend(["-loop", "1", "-framerate", str(settings.fps)])
+            inputs.extend(["-i", str(item.path)])
+            name = f"insert{index}"
+            duration = f"{item.duration:.9f}"
+            filters.append(f"[{index}:v]{fit},fps={settings.fps},format=yuv420p,"
+                           f"tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},"
+                           f"setpts=PTS-STARTPTS[{name}v]")
+            source = f"[{index}:a]" if item.has_audio else "anullsrc=r=48000:cl=stereo,"
+            filters.append(f"{source}{audio_format},apad,atrim=duration={duration},"
+                           f"asetpts=PTS-STARTPTS[{name}a]")
+            pairs.append(f"[{name}v][{name}a]")
+
+    append_media(0.0)
+    for i, (start, end) in enumerate(zip(cuts, cuts[1:])):
+        filters.append(f"[basev{i}]trim=start={start:.9f}:end={end:.9f},setpts=PTS-STARTPTS[cardv{i}]")
+        filters.append(f"[basea{i}]atrim=start={start:.9f}:end={end:.9f},asetpts=PTS-STARTPTS,"
+                       f"{audio_format}[carda{i}]")
+        pairs.append(f"[cardv{i}][carda{i}]")
+        append_media(end)
+    filters.append("".join(pairs) + f"concat=n={len(pairs)}:v=1:a=1[vout][aout]")
+
+
 def compose(settings: Settings, segments: list[Path], lengths: list[float], voice: Path, total: float,
             plan: OverlayPlan, out: Path, work: Path, music: Path | None, joins: list[bool] | None = None,
             progress: Callable[[float], None] | None = None, effects: Path | None = None,
-            background: Path | None = None) -> Path:
+            background: Path | None = None, inserts: list[MediaInsert] | None = None) -> Path:
     """``background``: a segment as long as the video, stacked under the footage (split layout); the
     segments are then the top part of the frame."""
     W, H, F = settings.width, settings.height, settings.fps
@@ -367,22 +417,29 @@ def compose(settings: Settings, segments: list[Path], lengths: list[float], voic
     if plan.mode == "ass" and plan.ass:
         f.append(f"[{last}]ass={plan.ass.name}:fontsdir={plan.fonts_dir.name if plan.fonts_dir else '.'}[vass]")
         last = "vass"
-    f.append(f"[{last}]format=yuv420p[vout]")
+    audio_map = f"{audio_i}:a"
+    output_duration = total
+    if inserts:
+        _insert_media(settings, inserts, total, last, audio_map, inputs, f)
+        audio_map = "[aout]"
+        output_duration += sum(item.duration for item in inserts)
+    else:
+        f.append(f"[{last}]format=yuv420p[vout]")
 
     def args(encode: list[str]) -> list[str]:
-        return [*inputs, "-filter_complex", ";".join(f), "-map", "[vout]", "-map", f"{audio_i}:a",
+        return [*inputs, "-filter_complex", ";".join(f), "-map", "[vout]", "-map", audio_map,
                 *encode, "-r", str(F), "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-                "-t", f"{total:.3f}", "-movflags", "+faststart", str(out.resolve())]
+                "-t", f"{output_duration:.3f}", "-movflags", "+faststart", str(out.resolve())]
     encode = _encode_args(settings, final=True)
     try:
-        ffmpeg.run(args(encode), label="final render", cwd=work, progress=progress, duration=total)
+        ffmpeg.run(args(encode), label="final render", cwd=work, progress=progress, duration=output_duration)
     except ffmpeg.FFmpegError:
         if encode[1] == "libx264":
             raise
         # Hardware encoders fail on some machines/drivers (busy GPU, unsupported size): use the CPU.
         log.warning("Encoder %s failed; rendering again with libx264", encode[1])
         ffmpeg.run(args(_encode_args(replace(settings, video_encoder="libx264"), final=True)),
-                   label="final render (libx264)", cwd=work, progress=progress, duration=total)
+                   label="final render (libx264)", cwd=work, progress=progress, duration=output_duration)
     return out
 
 
@@ -393,7 +450,8 @@ SEGMENT_SHARE = 0.3
 def render_video(settings: Settings, media: list[MediaItem], scene_durations: list[float], voice: Path,
                  total: float, plan: OverlayPlan, out: Path, work: Path, joins: list[bool] | None = None,
                  progress: Callable[[float], None] | None = None,
-                 effects: list[tuple[float, str]] | None = None, background: MediaItem | None = None) -> Path:
+                 effects: list[tuple[float, str]] | None = None, background: MediaItem | None = None,
+                 inserts: list[MediaInsert] | None = None) -> Path:
     """``progress`` gets the fraction of the render that is done (0..1), several times a second.
     ``effects`` are (time, sound) pairs for the sound-effects track (see sfx.events_for). ``background``
     (split layout): the footage fills the top half and this video plays under it for the whole Short."""
@@ -424,7 +482,7 @@ def render_video(settings: Settings, media: list[MediaItem], scene_durations: li
             log.info("Sound effects: %d", len(effects))
     return compose(settings, segments, lengths, voice, total, plan, out, work, music, joins,
                    progress=lambda frac: report(SEGMENT_SHARE + (1 - SEGMENT_SHARE) * frac), effects=fx,
-                   background=bg_seg)
+                   background=bg_seg, inserts=inserts)
 
 
 def split_sizes(settings: Settings) -> tuple[tuple[int, int], tuple[int, int]]:
