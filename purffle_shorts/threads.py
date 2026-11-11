@@ -67,7 +67,7 @@ def prepare_attachments(scenes, starts, total, fps, work, card_sizes):
             fit_size = None
             if kind == "image":
                 width, height = card_sizes[index]
-                fit_size = (max(2, int(width * .8) // 2 * 2), max(2, int(height * .8) // 2 * 2))
+                fit_size = (max(2, int(width * .95) // 2 * 2), max(2, int(height * .95) // 2 * 2))
             inserts.append(MediaInsert(at, duration, path, kind, has_audio, fit_size))
     return inserts
 

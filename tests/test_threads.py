@@ -118,6 +118,8 @@ def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypat
     ffmpeg.run(["-f", "lavfi", "-i", "color=blue:s=160x90:r=24",
                 "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "1.5",
                 "-c:v", "libx264", "-c:a", "aac", str(tmp_path / "clip.mp4")])
+    ffmpeg.run(["-f", "lavfi", "-i", "color=green:s=360x640:r=24:d=1",
+                "-c:v", "libx264", str(tmp_path / "background.mp4")])
     raw = thread_script(settings).to_dict()
     raw["scenes"][0]["thread"]["media"] = [
         {"kind": "image", "src": "photo.png"},
@@ -130,6 +132,7 @@ def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypat
     script_file.write_text(json.dumps(raw), encoding="utf-8")
     settings = settings.with_overrides(offline=True, tts_engine="silent", resolution=(360, 640),
                                        music_volume=0, fps=24, transition="none")
+    settings = settings.with_overrides(background_video=str(tmp_path / "background.mp4"))
     capture = {}
     render = pipeline.render_video
 
@@ -156,8 +159,11 @@ def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypat
     screen = ThreadsScreen(settings, Path(settings.caption_font))
     first_page = screen.pages(thread_script(settings).scenes)[0]
     half_card_height = screen.card_height(first_page) // 2
-    assert max(pixel(still.at + .5, (180, 320 - half_card_height))) < 30
-    assert max(pixel(still.at + .5, (screen.x + 1, 320))) < 30
+    assert still.fit_size == (int(screen.width * .95) // 2 * 2,
+                              int(screen.card_height(first_page) * .95) // 2 * 2)
+    for xy in ((180, 320 - half_card_height), (screen.x + 1, 320)):
+        r, g, b = pixel(still.at + .5, xy)
+        assert g > 100 and max(r, b) < 30
     r, g, b = pixel(clip.at + still.duration + .5, (180, 270))
     assert b > 200 and max(r, g) < 30
     audio = ffmpeg.run(["-ss", str(clip.at + still.duration + .2), "-i", str(result.video), "-t", "0.5",
@@ -165,7 +171,7 @@ def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypat
     peak = next(line for line in audio.splitlines() if "max_volume:" in line)
     assert float(peak.split()[-2]) > -30
     assert max(pixel(final.at + 4 - .25, (180, 270))) < 200
-    r, g, b = pixel(final.at + 4 + .25, (180, 320))
+    r, g, b = pixel(final.at + 4 + .4, (180, 320))
     assert r > 200 and max(g, b) < 30
 
     subtitles = (result.folder / "captions.srt").read_text(encoding="utf-8")
