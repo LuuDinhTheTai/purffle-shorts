@@ -1,0 +1,104 @@
+{
+  "style": "threads",
+  "language": "vi",
+  "topic": "Bắc Ninh hay Bắc Linh?",
+  "title": "Bắc Ninh hay Bắc Linh? Dân Threads trả lời",
+  "hook_text": "",
+  "description": "Ví dụ dựng video dọc từ ảnh chụp một bài đăng Threads. Kịch bản gồm bài gốc, bốn bình luận trong luồng chính và ba bài trích dẫn ở cột bên. Tên tài khoản dùng bí danh. Thời gian và lượt tương tác là số hiển thị trong ảnh chụp.",
+  "category": "entertainment",
+  "hashtags": ["#Threads", "#BacNinh", "#Shorts"],
+  "tags": ["Threads Việt Nam", "Bắc Ninh", "Bắc Linh", "bình luận Threads"],
+  "cast": ["tac_gia"],
+  "scenes": [
+    {
+      "narration": "Mng ơi Bắc Ninh có phải tên thật là Bắc Linh nhưng mà do dân ngọng L/N nên mọi người mới viết nhầm không ạ... em hỏi thật",
+      "search_query": "Bac Ninh Vietnam street aerial",
+      "thread": {
+        "kind": "post",
+        "author": "tac_gia",
+        "timestamp": "16 giờ",
+        "views": "98,2K",
+        "likes": "1,7K",
+        "replies": 98,
+        "reposts": 69,
+        "shares": 405
+      }
+    },
+    {
+      "narration": "Ngày xưa ở đây gọi là béc lin. Mà sợ nhầm với bên Đức nên đổi thành Bắc Ninh nhé =))))",
+      "search_query": "Berlin Germany street landmark",
+      "thread": {
+        "kind": "comment",
+        "author": "binh_luan_01",
+        "timestamp": "14 giờ",
+        "likes": "1,1K",
+        "replies": 5,
+        "reposts": 32,
+        "shares": 174
+      }
+    },
+    {
+      "narration": "Ko, Bắc là phía Bắc, Ninh là từ Việt Cổ có nghĩa là vùng đất rộng lớn yên bình",
+      "search_query": "northern Vietnam peaceful countryside rice fields",
+      "thread": {
+        "kind": "comment",
+        "author": "binh_luan_02",
+        "timestamp": "12 giờ",
+        "likes": 229,
+        "reposts": 3,
+        "shares": 4
+      }
+    },
+    {
+      "narration": "=)))))) tôi ng Bắc Ninh cx chưa nghĩ đến trường hợp này",
+      "search_query": "Bac Ninh Vietnam village road",
+      "thread": {
+        "kind": "comment",
+        "author": "binh_luan_03",
+        "timestamp": "15 giờ",
+        "likes": 198,
+        "shares": 2
+      }
+    },
+    {
+      "narration": "ở Phú Yên có lá á, mà do giọng địa phương đọc thành lá é đó bạn",
+      "search_query": "Phu Yen Vietnam coastal village",
+      "thread": {
+        "kind": "comment",
+        "author": "binh_luan_04",
+        "timestamp": "9 giờ"
+      }
+    },
+    {
+      "narration": "ô hay...",
+      "search_query": "Vietnam coffee shop window",
+      "thread": {
+        "kind": "comment",
+        "relation": "quote",
+        "author": "trich_dan_01",
+        "timestamp": "1 giờ"
+      }
+    },
+    {
+      "narration": "Em người ở đâu? Me: Em người Bắc Linh ạ. Do ngọng thui.",
+      "search_query": "Vietnam street cafe conversation",
+      "thread": {
+        "kind": "comment",
+        "relation": "quote",
+        "author": "trich_dan_02",
+        "timestamp": "11 giờ",
+        "text": "🗣️: Em người ở đâu?\nMe: Em người Bắc Linh ạ.\n:))do ngọng thui"
+      }
+    },
+    {
+      "narration": "Dcmmmmm",
+      "search_query": "Vietnam city street at night",
+      "thread": {
+        "kind": "comment",
+        "relation": "quote",
+        "author": "trich_dan_03",
+        "timestamp": "14 giờ"
+      }
+    }
+  ]
+}
