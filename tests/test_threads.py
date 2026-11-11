@@ -48,6 +48,15 @@ def test_long_post_paginates_without_losing_text_or_author(settings, tmp_path):
     assert screen.render(pages[0]).getbbox() is not None
 
 
+def test_threads_cards_hide_identity_without_leaking_name_length(settings):
+    screen = ThreadsScreen(settings, Path(settings.caption_font))
+    script = thread_script(settings)
+    for page in screen.pages(script.scenes):
+        original = screen.render(page)
+        page.meta.update(author="a_much_longer_username", avatar="private-avatar.jpg")
+        assert screen.render(page).tobytes() == original.tobytes()
+
+
 @needs_ffmpeg
 def test_threads_render_from_json_skips_ai_and_uses_timed_cards(settings, monkeypatch):
     from purffle_shorts import pipeline
