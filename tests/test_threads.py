@@ -157,15 +157,13 @@ def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypat
     r, g, b = pixel(still.at + .5, (180, 320))
     assert r > 200 and max(g, b) < 30
     screen = ThreadsScreen(settings, Path(settings.caption_font))
-    first_page = screen.pages(thread_script(settings).scenes)[0]
-    half_card_height = screen.card_height(first_page) // 2
-    assert still.fit_size == (int(screen.width * .95) // 2 * 2,
-                              int(screen.card_height(first_page) * .95) // 2 * 2)
-    for xy in ((180, 320 - half_card_height), (screen.x + 1, 320)):
-        r, g, b = pixel(still.at + .5, xy)
+    for at, item, channel in ((still.at + .5, still, 0),
+                              (clip.at + still.duration + .5, clip, 2)):
+        assert item.fit_size[0] == screen.width - 2 * screen.pad
+        assert pixel(at, (180, 320))[channel] > 200
+        assert max(pixel(at, (screen.x + 6, 320))) < 40  # black frame around media
+        r, g, b = pixel(at, (screen.x - 8, 320))
         assert g > 100 and max(r, b) < 30
-    r, g, b = pixel(clip.at + still.duration + .5, (180, 270))
-    assert b > 200 and max(r, g) < 30
     audio = ffmpeg.run(["-ss", str(clip.at + still.duration + .2), "-i", str(result.video), "-t", "0.5",
                         "-vn", "-af", "volumedetect", "-f", "null", "-"], loglevel="info")
     peak = next(line for line in audio.splitlines() if "max_volume:" in line)

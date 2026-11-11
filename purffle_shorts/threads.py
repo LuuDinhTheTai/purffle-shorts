@@ -19,7 +19,7 @@ from .timing import caption_chunks
 from .utils import download
 
 
-def prepare_attachments(scenes, starts, total, fps, work, card_sizes):
+def prepare_attachments(scenes, starts, total, fps, work, screen):
     """Resolve each scene's attachments in the order they will play."""
     inserts = []
     for index, scene in enumerate(scenes):
@@ -51,11 +51,13 @@ def prepare_attachments(scenes, starts, total, fps, work, card_sizes):
                     rgb.paste(rgba, mask=rgba.getchannel("A"))
                     path = dest.with_suffix(".png")
                     rgb.save(path)
+                    width, height = rgb.size
                 duration, has_audio = 3.0, False
             else:
                 info = ffmpeg.probe(path)
                 duration, has_audio = info["duration"], info["has_audio"]
-                if not info["has_video"] or not math.isfinite(duration) or duration <= 0:
+                width, height = info["width"], info["height"]
+                if not (width and height) or not math.isfinite(duration) or duration <= 0:
                     raise ValueError(f"{label}: expected a video with a known duration")
             requested = attachment.get("duration")
             if requested is not None:
@@ -64,11 +66,9 @@ def prepare_attachments(scenes, starts, total, fps, work, card_sizes):
                     raise ValueError(f"{label}: duration must be a positive number of seconds")
                 duration = min(duration, requested) if kind == "video" else requested
             duration = max(1, round(duration * fps)) / fps
-            fit_size = None
-            if kind == "image":
-                width, height = card_sizes[index]
-                fit_size = (max(2, int(width * .95) // 2 * 2), max(2, int(height * .95) // 2 * 2))
-            inserts.append(MediaInsert(at, duration, path, kind, has_audio, fit_size))
+            frame_path = dest.with_name(dest.name + "-card.png")
+            fit_size = screen.media_card(width, height, frame_path)
+            inserts.append(MediaInsert(at, duration, path, kind, frame_path, fit_size, has_audio))
     return inserts
 
 
@@ -167,6 +167,7 @@ class ThreadsScreen:
         self.y = (settings.height - self.height) // 2
         self.size = max(8, round(settings.unit * 25 / 1080))
         self.pad = round(self.size * 1.6)
+        self.radius = self.pad
         self.font = load_font(self.fp, self.size, 450)
         self.line_h = math.ceil(self.size * 1.4)
         self.avatar = round(self.size * 2.4)
@@ -281,6 +282,21 @@ class ThreadsScreen:
             draw.text((x, y+self.icon_size/2), label, font=self.font, anchor="lm", fill=color)
             x += self.font.getlength(label) + gap
 
+    def _draw_card_background(self, draw, bounds):
+        draw.rounded_rectangle(bounds, radius=self.radius, fill="#000000", outline="#262626",
+                               width=max(1, round(self.size * .05)))
+
+    def media_card(self, width: int, height: int, path: Path) -> tuple[int, int]:
+        """Save the transparent shell and return the maximum dimensions of its media."""
+        padding = self.pad
+        content_width = max(2, self.width - 2 * padding)
+        content_height = min(self.height - 2 * padding, round(height * content_width / width))
+        content_height = max(2, content_height // 2 * 2)
+        card = Image.new("RGBA", (self.width, content_height + 2 * padding))
+        self._draw_card_background(ImageDraw.Draw(card), (0, 0, card.width-1, card.height-1))
+        card.save(path)
+        return content_width, content_height
+
     def card_height(self, page: ThreadPage) -> int:
         comment = page.meta.get("kind") == "comment"
         line_count = page.text.count("\n") + 1 if page.text else 0
@@ -302,8 +318,7 @@ class ThreadsScreen:
             d.line((0, top, self.width-1, top), fill="#262626")
             d.line((0, bottom, self.width-1, bottom), fill="#262626")
         else:
-            d.rounded_rectangle(bounds, radius=round(self.size*1.6), fill="#000000",
-                                outline="#262626", width=max(1, round(self.size*.05)))
+            self._draw_card_background(d, bounds)
         av_y = top + self.pad
         self._avatar(d, self.pad, av_y, follow=not comment)
         header_y = av_y + (self.line_h/2 if comment else self.avatar/2)
@@ -319,10 +334,9 @@ class ThreadsScreen:
                    font=self.font, anchor="rs", fill=muted)
         return img
 
-    def build(self, scenes, starts, total: float, work: Path, cast=(), *, pages=None):
+    def build(self, scenes, starts, total: float, work: Path, cast=()):
         work.mkdir(parents=True, exist_ok=True)
-        if pages is None:
-            pages = self.pages(scenes, cast)
+        pages = self.pages(scenes, cast)
         entries = []
         for scene_index in range(len(scenes)):
             scene_pages = [p for p in pages if p.scene == scene_index]

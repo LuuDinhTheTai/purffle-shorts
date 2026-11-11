@@ -244,45 +244,46 @@ class MediaInsert:
     duration: float
     path: Path
     kind: str
+    frame_path: Path
+    fit_size: tuple[int, int]
     has_audio: bool = False
-    fit_size: tuple[int, int] | None = None
 
 
 def _insert_media(settings: Settings, inserts: list[MediaInsert], total: float, video: str, audio: str,
-                  inputs: list[str], filters: list[str], image_backgrounds: list[str]) -> None:
-    """Splice original video/audio between attachments, with no card or voice over an attachment."""
+                  inputs: list[str], filters: list[str], media_backgrounds: list[str]) -> None:
+    """Splice original video/audio between attachments, with a media card and no narration over each attachment."""
     groups = [(at, list(items)) for at, items in groupby(inserts, key=lambda item: item.at)]
     cuts = [0.0, *(at for at, _ in groups if 0 < at < total), total]
     count = len(cuts) - 1
     filters.append(f"[{video}]format=yuv420p,split={count}" + "".join(f"[basev{i}]" for i in range(count)))
     filters.append(f"[{audio}]asplit={count}" + "".join(f"[basea{i}]" for i in range(count)))
     pairs = []
-    canvas = f"pad={settings.width}:{settings.height}:(ow-iw)/2:(oh-ih)/2,setsar=1"
     audio_format = "aformat=sample_rates=48000:channel_layouts=stereo"
     starts = {at: items for at, items in groups}
-    backgrounds = iter(image_backgrounds)
+    backgrounds = iter(media_backgrounds)
 
     def append_media(at: float) -> None:
         for item in starts.get(at, []):
             index = inputs.count("-i")
-            inputs.extend(["-i", str(item.path)])
+            inputs.extend(["-i", str(item.path), "-i", str(item.frame_path)])
             name = f"insert{index}"
             duration = f"{item.duration:.9f}"
-            width, height = item.fit_size or settings.resolution
-            fit = f"scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2"
-            if item.kind == "image":
-                # Keep the footage immediately preceding the cut, without the Threads overlay.
-                frame = max(0, round(at * settings.fps) - 3)
-                hold = max(0, round(item.duration * settings.fps) - 1)
-                filters.append(f"[{next(backgrounds)}]trim=start_frame={frame}:end_frame={frame+1},"
-                               f"loop=loop={hold}:size=1:start=0,setpts=N[{name}bg]")
-                filters.append(f"[{index}:v]{fit},setsar=1[{name}image]")
-                filters.append(f"[{name}bg][{name}image]overlay=(W-w)/2:(H-h)/2:"
-                               f"format=yuv420[{name}v]")
-            else:
-                filters.append(f"[{index}:v]{fit},{canvas},fps={settings.fps},format=yuv420p,"
-                               f"tpad=stop_mode=clone:stop_duration={duration},trim=duration={duration},"
-                               f"setpts=PTS-STARTPTS[{name}v]")
+            width, height = item.fit_size
+            fit = f"scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1"
+            # Hold a clean frame of the background while the attachment card is on screen.
+            frame = max(0, round(at * settings.fps) - 3)
+            hold = max(0, round(item.duration * settings.fps) - 1)
+            filters.append(f"[{next(backgrounds)}]trim=start_frame={frame}:end_frame={frame+1},"
+                           f"loop=loop={hold}:size=1:start=0,setpts=N[{name}bg]")
+            filters.append(f"[{name}bg][{index+1}:v]overlay=(W-w)/2:(H-h)/2:"
+                           f"format=yuv420[{name}card]")
+            media = f"[{index}:v]{fit}"
+            if item.kind == "video":
+                media += (f",fps={settings.fps},tpad=stop_mode=clone:stop_duration={duration},"
+                          f"trim=duration={duration},setpts=PTS-STARTPTS")
+            filters.append(f"{media}[{name}media]")
+            filters.append(f"[{name}card][{name}media]overlay=(W-w)/2:(H-h)/2:"
+                           f"format=yuv420[{name}v]")
             source = f"[{index}:a]" if item.has_audio else "anullsrc=r=48000:cl=stereo,"
             filters.append(f"{source}{audio_format},apad,atrim=duration={duration},"
                            f"asetpts=PTS-STARTPTS[{name}a]")
@@ -356,11 +357,10 @@ def compose(settings: Settings, segments: list[Path], lengths: list[float], voic
         f.append(f"[{last}][bg]vstack=inputs=2,setsar=1[split]")
         last = "split"
 
-    image_count = sum(item.kind == "image" for item in inserts or [])
-    image_backgrounds = [f"imagebg{i}" for i in range(image_count)]
-    if image_backgrounds:
-        f.append(f"[{last}]fps={F},split={image_count+1}[footage]"
-                 + "".join(f"[{name}]" for name in image_backgrounds))
+    media_backgrounds = [f"mediabg{i}" for i in range(len(inserts or []))]
+    if media_backgrounds:
+        f.append(f"[{last}]fps={F},split={len(media_backgrounds)+1}[footage]"
+                 + "".join(f"[{name}]" for name in media_backgrounds))
         last = "footage"
 
     def overlay(src_label: str, expr: str, name: str):
@@ -438,7 +438,7 @@ def compose(settings: Settings, segments: list[Path], lengths: list[float], voic
     audio_map = f"{audio_i}:a"
     output_duration = total
     if inserts:
-        _insert_media(settings, inserts, total, last, audio_map, inputs, f, image_backgrounds)
+        _insert_media(settings, inserts, total, last, audio_map, inputs, f, media_backgrounds)
         audio_map = "[aout]"
         output_duration += sum(item.duration for item in inserts)
     else:
