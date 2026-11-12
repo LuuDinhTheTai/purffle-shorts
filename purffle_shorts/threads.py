@@ -167,7 +167,7 @@ class ThreadsScreen:
         self.y = (settings.height - self.height) // 2
         self.size = max(8, round(settings.unit * 25 / 1080))
         self.pad = round(self.size * 1.6)
-        self.radius = self.pad
+        self.radius = round(self.size * 1.25)
         self.font = load_font(self.fp, self.size, 450)
         self.line_h = math.ceil(self.size * 1.4)
         self.avatar = round(self.size * 2.4)
@@ -313,12 +313,7 @@ class ThreadsScreen:
         bottom = top + card_h - 1
         ink, muted = "#F3F5F7", "#777777"
         bounds = (0, top, self.width-1, bottom)
-        if comment:
-            d.rectangle(bounds, fill="#000000")
-            d.line((0, top, self.width-1, top), fill="#262626")
-            d.line((0, bottom, self.width-1, bottom), fill="#262626")
-        else:
-            self._draw_card_background(d, bounds)
+        self._draw_card_background(d, bounds)
         av_y = top + self.pad
         self._avatar(d, self.pad, av_y, follow=not comment)
         header_y = av_y + (self.line_h/2 if comment else self.avatar/2)
