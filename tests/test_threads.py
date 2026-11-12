@@ -67,6 +67,7 @@ def test_threads_card_uses_black_background_and_scaled_dimensions(settings):
     for page in screen.pages(thread_script(settings).scenes):
         image = screen.render(page)
         _, top, _, bottom = image.getbbox()
+        assert abs(screen.y + (top + bottom) / 2 - 672) <= 1
         assert image.getpixel((0, top))[3] == 0
         assert image.getpixel((screen.width - 1, bottom - 1))[3] == 0
         assert image.getpixel((screen.width // 2, bottom - 3)) == (0, 0, 0, 255)
@@ -155,23 +156,25 @@ def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypat
         with Image.open(frame) as image:
             return image.convert("RGB").getpixel(xy)
 
-    assert max(pixel(still.at - .25, (180, 270))) < 200
-    r, g, b = pixel(still.at + .5, (180, 320))
-    assert r > 200 and max(g, b) < 30
     screen = ThreadsScreen(settings, Path(settings.caption_font))
+    center = (settings.width // 2, 224)
+    card_edge = (screen.x + 6, 224)
+    assert max(pixel(still.at - .25, card_edge)) < 40
+    r, g, b = pixel(still.at + .5, center)
+    assert r > 200 and max(g, b) < 30
     for at, item, channel in ((still.at + .5, still, 0),
                               (clip.at + still.duration + .5, clip, 2)):
         assert item.fit_size[0] == int(screen.width * .9) // 2 * 2
-        assert pixel(at, (180, 320))[channel] > 200
-        assert max(pixel(at, (screen.x + 6, 320))) < 40  # black frame around media
-        r, g, b = pixel(at, (screen.x - 8, 320))
+        assert pixel(at, center)[channel] > 200
+        assert max(pixel(at, card_edge)) < 40  # black frame around media
+        r, g, b = pixel(at, (screen.x - 8, 224))
         assert g > 100 and max(r, b) < 30
     audio = ffmpeg.run(["-ss", str(clip.at + still.duration + .2), "-i", str(result.video), "-t", "0.5",
                         "-vn", "-af", "volumedetect", "-f", "null", "-"], loglevel="info")
     peak = next(line for line in audio.splitlines() if "max_volume:" in line)
     assert float(peak.split()[-2]) > -30
-    assert max(pixel(final.at + 4 - .25, (180, 270))) < 200
-    r, g, b = pixel(final.at + 4 + .4, (180, 320))
+    assert max(pixel(final.at + 4 - .25, card_edge)) < 40
+    r, g, b = pixel(final.at + 4 + .4, center)
     assert r > 200 and max(g, b) < 30
 
     subtitles = (result.folder / "captions.srt").read_text(encoding="utf-8")

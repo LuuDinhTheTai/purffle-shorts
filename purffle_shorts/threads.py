@@ -68,7 +68,7 @@ def prepare_attachments(scenes, starts, total, fps, work, screen):
             duration = max(1, round(duration * fps)) / fps
             frame_path = dest.with_name(dest.name + "-card.png")
             fit_size = screen.media_card(width, height, frame_path)
-            inserts.append(MediaInsert(at, duration, path, kind, frame_path, fit_size, has_audio))
+            inserts.append(MediaInsert(at, duration, path, kind, frame_path, fit_size, screen.center_y, has_audio))
     return inserts
 
 
@@ -162,9 +162,10 @@ class ThreadsScreen:
         self.s = settings
         self.fp = str(font_path) if font_path else None
         self.width = round(settings.width * .75 / 2) * 2
-        self.height = int(settings.height * .76) // 2 * 2
+        self.center_y = round(settings.height * .35)
+        self.height = 2 * self.center_y
         self.x = (settings.width - self.width) // 2
-        self.y = (settings.height - self.height) // 2
+        self.y = self.center_y - self.height // 2
         self.size = max(8, round(settings.unit * 25 / 1080))
         self.pad = round(self.size * 1.6)
         self.radius = round(self.size * 1.25)

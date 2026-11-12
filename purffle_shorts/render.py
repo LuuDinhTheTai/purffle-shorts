@@ -246,6 +246,7 @@ class MediaInsert:
     kind: str
     frame_path: Path
     fit_size: tuple[int, int]
+    center_y: int
     has_audio: bool = False
 
 
@@ -275,14 +276,15 @@ def _insert_media(settings: Settings, inserts: list[MediaInsert], total: float, 
             hold = max(0, round(item.duration * settings.fps) - 1)
             filters.append(f"[{next(backgrounds)}]trim=start_frame={frame}:end_frame={frame+1},"
                            f"loop=loop={hold}:size=1:start=0,setpts=N[{name}bg]")
-            filters.append(f"[{name}bg][{index+1}:v]overlay=(W-w)/2:(H-h)/2:"
+            placement = f"(W-w)/2:{item.center_y}-h/2"
+            filters.append(f"[{name}bg][{index+1}:v]overlay={placement}:"
                            f"format=yuv420[{name}card]")
             media = f"[{index}:v]{fit}"
             if item.kind == "video":
                 media += (f",fps={settings.fps},tpad=stop_mode=clone:stop_duration={duration},"
                           f"trim=duration={duration},setpts=PTS-STARTPTS")
             filters.append(f"{media}[{name}media]")
-            filters.append(f"[{name}card][{name}media]overlay=(W-w)/2:(H-h)/2:"
+            filters.append(f"[{name}card][{name}media]overlay={placement}:"
                            f"format=yuv420[{name}v]")
             source = f"[{index}:a]" if item.has_audio else "anullsrc=r=48000:cl=stereo,"
             filters.append(f"{source}{audio_format},apad,atrim=duration={duration},"
