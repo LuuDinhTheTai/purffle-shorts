@@ -63,7 +63,7 @@ def test_threads_cards_hide_identity_without_leaking_name_length(settings):
 def test_threads_card_uses_black_background_and_scaled_dimensions(settings):
     settings = settings.with_overrides(resolution=(1080, 1920))
     screen = ThreadsScreen(settings, Path(settings.caption_font))
-    assert (screen.width, screen.font.size, screen.radius) == (810, 35, 31)
+    assert (screen.width, screen.font.size, screen.radius) == (810, 30, 31)
     for page in screen.pages(thread_script(settings).scenes):
         image = screen.render(page)
         _, top, _, bottom = image.getbbox()

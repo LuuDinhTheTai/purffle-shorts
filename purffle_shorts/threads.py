@@ -169,7 +169,7 @@ class ThreadsScreen:
         self.size = max(8, round(settings.unit * 25 / 1080))
         self.pad = round(self.size * 1.6)
         self.radius = round(self.size * 1.25)
-        self.font = load_font(self.fp, max(8, round(settings.unit * 35 / 1080)), 450)
+        self.font = load_font(self.fp, max(8, round(settings.unit * 30 / 1080)), 450)
         self.line_h = math.ceil(self.font.size * 1.4)
         self.avatar = round(self.size * 2.4)
         self.avatar_gap = round(self.size * .8)
