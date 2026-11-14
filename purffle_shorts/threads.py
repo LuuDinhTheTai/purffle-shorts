@@ -19,7 +19,7 @@ from .timing import caption_chunks
 from .utils import download
 
 
-def prepare_attachments(scenes, starts, total, fps, work, screen):
+def prepare_attachments(scenes, starts, total, fps, work, screen, speak):
     """Resolve each scene's attachments in the order they will play."""
     inserts = []
     for index, scene in enumerate(scenes):
@@ -65,29 +65,42 @@ def prepare_attachments(scenes, starts, total, fps, work, screen):
                         or not math.isfinite(requested) or requested <= 0):
                     raise ValueError(f"{label}: duration must be a positive number of seconds")
                 duration = min(duration, requested) if kind == "video" else requested
-            duration = max(1, round(duration * fps)) / fps
+            narration = None
+            text = attachment.get("narration", "")
+            if not isinstance(text, str) or (kind != "image" and text.strip()):
+                raise ValueError(f"{label}: narration must be text and is supported only for images")
+            frames = max(1, round(duration * fps))
+            if text.strip():
+                narration = speak(text.strip(), scene, dest.with_name(dest.name + "-voice"))
+                frames = max(frames, math.ceil(narration.duration * fps))
+            duration = frames / fps
             frame_path = dest.with_name(dest.name + "-card.png")
             fit_size = screen.media_card(width, height, frame_path)
-            inserts.append(MediaInsert(at, duration, path, kind, frame_path, fit_size, screen.center_y, has_audio))
+            inserts.append(MediaInsert(at, duration, path, kind, frame_path, fit_size, screen.center_y, has_audio, narration))
     return inserts
 
 
 def attachment_captions(words, inserts, max_words, total):
-    """Keep subtitles in sync and leave attachment intervals free of narration captions."""
+    """Align subtitles to the post narration and any separately voiced images."""
     chunks = []
     start = offset = 0.0
-    durations = {}
+    by_cut = {}
     for item in inserts:
-        durations[item.at] = durations.get(item.at, 0.0) + item.duration
-    for end, duration in [*durations.items(), (total, 0.0)]:
-        if end > start:
-            group = [word for word in words if start <= word.start < end]
-            for chunk in caption_chunks(group, max_words, total=end):
-                chunk.start += offset
-                chunk.end = min(chunk.end, end) + offset
-                chunks.append(chunk)
+        by_cut.setdefault(item.at, []).append(item)
+    for end in sorted({*by_cut, total}):
+        group = [word for word in words if start <= word.start < end]
+        for chunk in caption_chunks(group, max_words, total=end):
+            chunk.start += offset
+            chunk.end = min(chunk.end, end) + offset
+            chunks.append(chunk)
+        for item in by_cut.get(end, []):
+            if item.narration:
+                for chunk in caption_chunks(item.narration.words, max_words, total=item.duration):
+                    chunk.start += end + offset
+                    chunk.end += end + offset
+                    chunks.append(chunk)
+            offset += item.duration
         start = end
-        offset += duration
     return chunks
 
 

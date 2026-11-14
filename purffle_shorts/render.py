@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from itertools import groupby
 from pathlib import Path
 
-from . import ffmpeg, sfx
+from . import ffmpeg, sfx, tts
 from .config import Settings
 from .media import MediaItem
 from .overlays import OverlayPlan
@@ -248,11 +248,12 @@ class MediaInsert:
     fit_size: tuple[int, int]
     center_y: int
     has_audio: bool = False
+    narration: tts.Speech | None = None
 
 
 def _insert_media(settings: Settings, inserts: list[MediaInsert], total: float, video: str, audio: str,
                   inputs: list[str], filters: list[str], media_backgrounds: list[str]) -> None:
-    """Splice original video/audio between attachments, with a media card and no narration over each attachment."""
+    """Splice original video/audio between attachments, with a media card and its own audio."""
     groups = [(at, list(items)) for at, items in groupby(inserts, key=lambda item: item.at)]
     cuts = [0.0, *(at for at, _ in groups if 0 < at < total), total]
     count = len(cuts) - 1
@@ -286,7 +287,11 @@ def _insert_media(settings: Settings, inserts: list[MediaInsert], total: float, 
             filters.append(f"{media}[{name}media]")
             filters.append(f"[{name}card][{name}media]overlay={placement}:"
                            f"format=yuv420[{name}v]")
-            source = f"[{index}:a]" if item.has_audio else "anullsrc=r=48000:cl=stereo,"
+            if item.narration:
+                inputs.extend(["-i", str(item.narration.audio)])
+                source = f"[{index+2}:a]"
+            else:
+                source = f"[{index}:a]" if item.has_audio else "anullsrc=r=48000:cl=stereo,"
             filters.append(f"{source}{audio_format},apad,atrim=duration={duration},"
                            f"asetpts=PTS-STARTPTS[{name}a]")
             pairs.append(f"[{name}v][{name}a]")

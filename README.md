@@ -595,7 +595,7 @@ Common options: `--source queue|search|trending|wikipedia|reddit|rss|file|niche`
   "thread": {
     "kind": "post",
     "media": [
-      { "kind": "image", "src": "media/photo.jpg", "duration": 3 },
+      { "kind": "image", "src": "media/photo.jpg", "duration": 3, "narration": "Nội dung cần đọc trên ảnh." },
       { "kind": "video", "src": "media/clip.mp4" }
     ]
   }
@@ -608,7 +608,9 @@ and rounded corners as the Threads post card. Media fills 90% of the card width 
 aspect ratio, scaling down further if needed to fit the height. A still frame of the preceding
 background footage remains visible around the card.
 For a media-only post, omit `narration` to show the card without voiceover.
-Images display for 3 seconds by default. Videos play from the beginning with their original audio.
+Images display for 3 seconds by default. Put text to read from an image in that image's
+`narration` field. The voiceover starts when the image appears, and the image stays visible
+until the reading finishes. Videos play from the beginning with their original audio.
 Set `duration` in seconds to change the image hold or trim a video. Use a local path or a direct
 HTTP(S) media URL for `src`. When rendering with `make --script`, relative paths are resolved from
 the JSON file's directory. For Studio jobs, use absolute paths on the Studio host or direct URLs.

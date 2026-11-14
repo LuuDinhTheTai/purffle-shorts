@@ -114,7 +114,8 @@ def test_threads_render_from_json_skips_ai_and_uses_timed_cards(settings, monkey
 
 @needs_ffmpeg
 def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypatch):
-    from purffle_shorts import pipeline
+    from purffle_shorts import pipeline, tts
+    from purffle_shorts.timing import Word
     from purffle_shorts.render import extract_frame
 
     Image.new("RGB", (160, 90), "red").save(tmp_path / "photo.png")
@@ -123,9 +124,19 @@ def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypat
                 "-c:v", "libx264", "-c:a", "aac", str(tmp_path / "clip.mp4")])
     ffmpeg.run(["-f", "lavfi", "-i", "color=green:s=360x640:r=24:d=1",
                 "-c:v", "libx264", str(tmp_path / "background.mp4")])
+    voice = tmp_path / "image-voice.wav"
+    ffmpeg.run(["-f", "lavfi", "-i", "sine=frequency=660:sample_rate=48000", "-t", "3.5", str(voice)])
+    original_speak = Studio._speak
+
+    def speak(self, script, work, settings):
+        if script.narration == "Chữ trên ảnh":
+            return tts.Speech(voice, [Word("Chữ trên ảnh", 0, 3.4)], 3.5, "test", "test", "native")
+        return original_speak(self, script, work, settings)
+
+    monkeypatch.setattr(Studio, "_speak", speak)
     raw = thread_script(settings).to_dict()
     raw["scenes"][0]["thread"]["media"] = [
-        {"kind": "image", "src": "photo.png"},
+        {"kind": "image", "src": "photo.png", "narration": "Chữ trên ảnh"},
         {"kind": "video", "src": "clip.mp4", "duration": 1},
     ]
     raw["scenes"].append({"thread": {
@@ -147,9 +158,9 @@ def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypat
     result = Studio(settings).make(script_file=script_file, upload=False)
     assert result.ok, result.error
     still, clip, final = capture["inserts"]
-    assert [item.duration for item in capture["inserts"]] == [3, 1, .5]
+    assert [item.duration for item in capture["inserts"]] == [3.5, 1, .5]
     assert clip.has_audio and still.at == clip.at < final.at == capture["total"]
-    assert abs(ffmpeg.duration(result.video) - capture["total"] - 4.5) < .15
+    assert abs(ffmpeg.duration(result.video) - capture["total"] - 5) < .15
 
     def pixel(at, xy):
         frame = extract_frame(result.video, at, tmp_path / "frame.png")
@@ -173,9 +184,15 @@ def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypat
                         "-vn", "-af", "volumedetect", "-f", "null", "-"], loglevel="info")
     peak = next(line for line in audio.splitlines() if "max_volume:" in line)
     assert float(peak.split()[-2]) > -30
-    assert max(pixel(final.at + 4 - .25, card_edge)) < 40
-    r, g, b = pixel(final.at + 4 + .4, center)
+    assert max(pixel(final.at + 4.5 - .25, card_edge)) < 40
+    r, g, b = pixel(final.at + 4.5 + .4, center)
     assert r > 200 and max(g, b) < 30
+
+    assert pixel(still.at + 3.25, center)[0] > 200
+    audio = ffmpeg.run(["-ss", str(still.at + 3), "-i", str(result.video), "-t", "0.25",
+                        "-vn", "-af", "volumedetect", "-f", "null", "-"], loglevel="info")
+    peak = next(line for line in audio.splitlines() if "max_volume:" in line)
+    assert float(peak.split()[-2]) > -30
 
     subtitles = (result.folder / "captions.srt").read_text(encoding="utf-8")
 
@@ -184,5 +201,6 @@ def test_threads_attachments_play_after_their_card(settings, tmp_path, monkeypat
         return int(h) * 3600 + int(m) * 60 + float(s)
 
     ranges = [tuple(map(seconds, line.split(" --> "))) for line in subtitles.splitlines() if " --> " in line]
-    assert any(start >= still.at + 4 - .001 for start, _ in ranges)
-    assert all(end <= still.at + .001 or start >= still.at + 4 - .001 for start, end in ranges)
+    assert any(start >= still.at + 4.5 - .001 for start, _ in ranges)
+    assert "Chữ trên ảnh" in subtitles
+    assert any(abs(start - still.at) < .002 and 3.4 <= end - start <= 3.501 for start, end in ranges)

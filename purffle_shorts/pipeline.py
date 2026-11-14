@@ -455,7 +455,12 @@ class Studio:
                 font = resolve_threads_font(s)
                 screen = ThreadsScreen(s, font)
                 starts = speech.line_starts or [tm.start for tm in timeline]
-                inserts = prepare_attachments(script.scenes, starts, total, s.fps, work / "attachments", screen)
+                def speak_attachment(text, scene, dest):
+                    narration = replace(script, scenes=[replace(scene, narration=text)])
+                    return self._speak(narration, dest, s)
+
+                inserts = prepare_attachments(script.scenes, starts, total, s.fps, work / "attachments", screen,
+                                              speak_attachment)
                 if inserts:
                     chunks = attachment_captions(speech.words, inserts, s.caption_max_words, total)
                 threads_plan = (screen.build(script.scenes, starts, total, work / "threads", script.cast),
